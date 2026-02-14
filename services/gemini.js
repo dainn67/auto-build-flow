@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
  * Gemini AI Service for processing messages
  */
 class GeminiService {
-  constructor(apiKey, modelName = 'gemini-2.0-flash-exp') {
+  constructor(apiKey, modelName = 'gemini-2.0-flash-001') {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is required');
     }
@@ -21,15 +21,9 @@ class GeminiService {
    */
   async generate(prompt) {
     try {
-      console.log(`\n🤖 Sending prompt to Gemini (${this.modelName})...`);
-      console.log(`Prompt length: ${prompt.length} characters`);
-      
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
-      
-      console.log(`✅ Received response from Gemini`);
-      console.log(`Response length: ${text.length} characters`);
       
       return text;
     } catch (error) {
@@ -58,7 +52,6 @@ class GeminiService {
       }
       
       const parsed = JSON.parse(jsonText);
-      console.log('✅ Successfully parsed JSON response');
       
       return parsed;
     } catch (error) {
