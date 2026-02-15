@@ -66,8 +66,19 @@ class GeminiService {
    * @param {string} prompt - The formatted prompt
    * @returns {Promise<Object>} - The analysis result
    */
-  async processMessage(prompt) {
-    return await this.generateJSON(prompt);
+  /**
+   * Process a Discord message using Gemini
+   * @param {string} prompt - The formatted prompt
+   * @param {Object} [options] - Optional named parameters
+   * @param {boolean} [options.isJSON=false] - Whether to parse the response as JSON
+   * @returns {Promise<Object|string>} - The analysis result (parsed JSON or text)
+   */
+  async processMessage(prompt, { isJSON = false } = {}) {
+    if (isJSON) {
+      return await this.generateJSON(prompt);
+    } else {
+      return await this.generate(prompt);
+    }
   }
 }
 

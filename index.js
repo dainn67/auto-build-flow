@@ -96,10 +96,10 @@ client.on(Events.MessageCreate, async (message) => {
     const prompt = createMessagePrompt(metadata);
 
     // Get AI analysis
-    const aiResponse = await geminiService.processMessage(prompt);
+    const aiResponse = await geminiService.processMessage(prompt, { isJSON: false });
 
     // Reply to confirm receipt with AI insight
-    const replyMessage = `💭 ${message.author}: ${JSON.stringify(aiResponse)}`;
+    const replyMessage = `💭 ${message.author}: ${aiResponse}`;
     await message.channel.send(replyMessage);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
