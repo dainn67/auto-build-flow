@@ -12,6 +12,7 @@ Rules:
 First just check if the message is a request to build apps. Request to build apps should have the intent to build some apps with specific version and build number.
 If not or just a normal message, return empty value for all fields. Do not generate any response, script, command or message.
 Write a short reponse to user, saying you are building the apps with that version and build number.
+Your response should match the tone and context of the user request.
 If user doesn't specify platform, the command is build.sh a u.
 Otherwise, the command is "build.sh a u" or "build.sh i" (a for android and i for ios, only android has "u" postfix).
 If no app or only one app is provided, generate the empty list or a list with only one element: () or (app_name)
