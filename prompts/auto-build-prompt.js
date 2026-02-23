@@ -9,7 +9,7 @@ This is the app list: ${appNames.join(", ")}.
 This is the user request: "${content}"
 From the user request, filter and select the apps, their version and build number user want and generate build command.
 Rules:
-Write a short reponse to user.
+Write a short reponse to user, saying you are building the apps with that version and build number.
 If user doesn't specify platform, the command is build.sh a u.
 Otherwise, the command is "build.sh a u" or "build.sh i" (a for android and i for ios, only android has "u" postfix).
 If no app or only one app is provided, generate the empty list or a list with only one element: () or (app_name)

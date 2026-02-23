@@ -127,18 +127,16 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       schema: responseSchema,
     });
 
-    console.log("AI Response:", JSON.stringify(aiResponseObj, null, 2));
-
     const botMessage = aiResponseObj.message;
     const script = aiResponseObj.script;
     const command = aiResponseObj.command;
 
-    const botResponse = `${discordMessage.author}\n${botMessage}\n${script}\n${command}\n`;
+    const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
     const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
 
-    // Replace the script in the output.txt file
+    // Replace the app script
     try {
       const result = await replaceFileContent(`${dir}/apps.sh`, script);
       console.log(result);
@@ -146,9 +144,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       console.error(error.message);
     }
 
-    const buildResult = await executeCommand(`cd ${dir} && ./${command}`);
-    console.log(`Message: ${buildResult.message}`);
-    console.log(`Output: ${buildResult.stdout}`);
+    await executeCommand(`cd ${dir} && ./${command}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
 
