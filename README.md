@@ -177,6 +177,57 @@ Response length: 287 characters
 🏷️ Category: greeting
 ```
 
+## Utility Functions (utils.js)
+
+The project includes utility functions for file operations and command execution.
+
+### Usage
+
+```javascript
+const { replaceFileContent, executeCommand } = require('./utils.js');
+
+// Example 1: Replace file content
+async function updateFile() {
+  try {
+    const result = await replaceFileContent('./output.txt', 'New content here');
+    console.log(result); // ✅ File updated successfully: ./output.txt
+  } catch (error) {
+    console.error(error.message);
+  }
+}
+
+// Example 2: Execute shell command
+async function runCommand() {
+  const result = await executeCommand('ls -la');
+  console.log(result.message); // ✅ Command executed successfully: ls -la
+  console.log(result.stdout);  // Command output
+}
+```
+
+### Available Functions
+
+#### `replaceFileContent(filePath, newContent)`
+Replaces the entire content of a file with the provided string.
+
+**Parameters:**
+- `filePath` (string) - Path to the file
+- `newContent` (string) - New content to write
+
+**Returns:** Promise with success message
+
+#### `executeCommand(command)`
+Executes a shell command and returns the output.
+
+**Parameters:**
+- `command` (string) - Command to execute
+
+**Returns:** Promise with object containing:
+- `success` (boolean) - Whether command succeeded
+- `stdout` (string) - Standard output
+- `stderr` (string) - Error output
+- `message` (string) - Status message
+- `exitCode` (number) - Exit code (only on failure)
+
 ## Technologies Used
 
 - **Node.js** - JavaScript runtime

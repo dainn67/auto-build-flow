@@ -10,8 +10,8 @@ This is the user request: "${content}"
 From the user request, filter and select the apps, their version and build number user want and generate build command.
 Rules:
 Write a short reponse to user.
-If user doesn't specify platform, the command is ./build.sh a u.
-Otherwise, the command is "./build.sh a u" or "./build.sh i" (a for android and i for ios, only android has "u" postfix).
+If user doesn't specify platform, the command is build.sh a u.
+Otherwise, the command is "build.sh a u" or "build.sh i" (a for android and i for ios, only android has "u" postfix).
 If no version or build number is provided, use version 1.1.1, build number 1.
 Return the data, with your response following this JSON format template:
 \`\`\`json{"script": "${scriptConfig}", "command": "Your build command", "message": "Your message"}\`\`\`

@@ -15,6 +15,33 @@ class GeminiService {
   }
 
   /**
+   * Generate content using Gemini API with JSON response mode
+   * @param {string} prompt - The prompt to send to Gemini
+   * @param {Object} schema - JSON schema for the response
+   * @returns {Promise<Object>} - The generated JSON response
+   */
+  async generateWithSchema(prompt, schema) {
+    try {
+      const model = this.genAI.getGenerativeModel({ 
+        model: this.modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: schema
+        }
+      });
+      
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      return JSON.parse(text);
+    } catch (error) {
+      console.error('❌ Error calling Gemini API with schema:', error.message);
+      throw error;
+    }
+  }
+
+  /**
    * Generate content using Gemini API
    * @param {string} prompt - The prompt to send to Gemini
    * @returns {Promise<string>} - The generated text response
@@ -71,10 +98,13 @@ class GeminiService {
    * @param {string} prompt - The formatted prompt
    * @param {Object} [options] - Optional named parameters
    * @param {boolean} [options.isJSON=false] - Whether to parse the response as JSON
+   * @param {Object} [options.schema] - JSON schema for structured output
    * @returns {Promise<Object|string>} - The analysis result (parsed JSON or text)
    */
-  async processMessage(prompt, { isJSON = false } = {}) {
-    if (isJSON) {
+  async processMessage(prompt, { isJSON = false, schema = null } = {}) {
+    if (schema) {
+      return await this.generateWithSchema(prompt, schema);
+    } else if (isJSON) {
       return await this.generateJSON(prompt);
     } else {
       return await this.generate(prompt);
