@@ -131,6 +131,10 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     const script = aiResponseObj.script;
     const command = aiResponseObj.command;
 
+    if (!aiResponseObj || !botMessage || !script || !command) {
+      return;
+    }
+
     const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
