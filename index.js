@@ -134,7 +134,8 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
-    const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
+    // const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
+    const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
 
     // Replace the app script
     try {
