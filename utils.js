@@ -23,10 +23,7 @@ async function replaceFileContent(filePath, newContent) {
  */
 async function executeCommand(command) {
   return new Promise((resolve) => {
-    console.log("=".repeat(80));
-    console.log("🔧 EXECUTING COMMAND:");
-    console.log(`  Command: ${command}`);
-    console.log("=".repeat(80));
+    console.log("🔧 EXECUTING: ${command}");
 
     // Parse command and arguments
     const [cmd, ...args] = command.split(" ");
@@ -55,8 +52,6 @@ async function executeCommand(command) {
 
     // Handle process exit
     childProcess.on("close", (code) => {
-      console.log("=".repeat(80));
-
       if (code === 0) {
         console.log(`✅ Command executed successfully (exit code: ${code})`);
         resolve({
@@ -80,7 +75,6 @@ async function executeCommand(command) {
 
     // Handle process errors
     childProcess.on("error", (error) => {
-      console.log("=".repeat(80));
       console.log(`❌ Failed to execute command: ${error.message}`);
       resolve({
         success: false,

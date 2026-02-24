@@ -43,6 +43,9 @@ const client = new Client({
 // Bot ready state
 let botReady = false;
 
+// Build state
+let isBuilding = false;
+
 // Discord bot event handlers
 client.once(Events.ClientReady, (readyClient) => {
   botReady = true;
@@ -78,11 +81,8 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     server_name: discordMessage.guild?.name || null,
   };
 
-  // Log the message details
   // console.log(
   //   [
-  //     "=".repeat(20),
-  //     "MESSAGE RECEIVED:",
   //     `  Content: ${metadata.content}`,
   //     `  User ID: ${metadata.user_id}`,
   //     `  Username: ${metadata.username}`,
@@ -93,7 +93,6 @@ client.on(Events.MessageCreate, async (discordMessage) => {
   //     `  Timestamp: ${metadata.timestamp}`,
   //     `  Server ID: ${metadata.server_id}`,
   //     `  Server Name: ${metadata.server_name}`,
-  //     "=".repeat(20),
   //   ].join("\n"),
   // );
 
@@ -135,25 +134,32 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       return;
     }
 
+    // Check if a build is already in progress
+    if (isBuilding) {
+      try {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ⏳ Please wait for the current build to finish.`,
+        );
+      } catch (error) {
+        console.error("Failed to send build busy message:", error);
+      }
+      return;
+    }
+
     const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
-    // const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
-    const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
+    const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
+    // const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
 
     // Replace the app script
-    try {
-      const result = await replaceFileContent(`${dir}/apps.sh`, script);
-      console.log(result);
-    } catch (error) {
-      console.error(error.message);
-    }
+    await replaceFileContent(`${dir}/apps.sh`, script);
 
+    isBuilding = true;
     await executeCommand(`cd ${dir} && ./${command}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
 
-    // Fallback: send simple confirmation
     try {
       await discordMessage.channel.send(
         `Sent fallback confirmation reply for message ${metadata.message_id}`,
@@ -161,6 +167,8 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     } catch (replyError) {
       console.error(`Failed to send fallback reply:`, replyError);
     }
+  } finally {
+    isBuilding = false;
   }
 });
 
