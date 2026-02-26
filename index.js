@@ -223,9 +223,45 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       await discordMessage.channel.send(
         `${discordMessage.author} 🔀 Switching to branch: **${branch}**...`,
       );
-      const checkoutResult = await executeCommand(
-        `cd ${dir} && git fetch origin && git checkout ${branch} && git pull origin ${branch}`,
+
+      // Fetch latest remote branches
+      await executeCommand(`cd ${dir} && git fetch origin`);
+
+      // Try exact checkout first
+      let checkoutResult = await executeCommand(
+        `cd ${dir} && git checkout ${branch} && git pull origin ${branch}`,
       );
+
+      // If exact match fails, try fuzzy search on remote branches
+      if (!checkoutResult.success) {
+        const searchResult = await executeCommand(
+          `cd ${dir} && git branch -r | grep -i "${branch}" | sed 's|origin/||' | xargs`,
+        );
+
+        const candidates = (searchResult.stdout || "")
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean);
+
+        if (candidates.length === 1) {
+          // Found exactly one match → use it
+          const matched = candidates[0];
+          await discordMessage.channel.send(
+            `${discordMessage.author} 🔍 Branch **${branch}** not found, using match: **${matched}**`,
+          );
+          checkoutResult = await executeCommand(
+            `cd ${dir} && git checkout ${matched} && git pull origin ${matched}`,
+          );
+        } else if (candidates.length > 1) {
+          // Multiple matches → ask user to be more specific
+          await discordMessage.channel.send(
+            `${discordMessage.author} ⚠️ Multiple branches match "**${branch}**":\n${candidates.map((c) => `• \`${c}\``).join("\n")}\nPlease specify the full branch name.`,
+          );
+          isBuilding = false;
+          return;
+        }
+      }
+
       if (!checkoutResult.success) {
         await discordMessage.channel.send(
           `${discordMessage.author} ❌ Failed to checkout branch **${branch}**: ${checkoutResult.stderr || checkoutResult.message}`,
