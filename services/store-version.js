@@ -292,41 +292,42 @@ function incrementVersion(versionName, versionCode) {
  *
  * @param {string[]} appNames  – e.g. ["asvab", "cdl"]
  * @param {string} flutterDir  – root of the Flutter project (contains service_account.json & ios_api_key/)
+ * @param {string} platform    – "android" or "ios" (only query the relevant store)
  * @returns {{ versionName: string, buildNumber: number }}
  */
-export async function getLatestVersionForApps(appNames, flutterDir) {
+export async function getLatestVersionForApps(appNames, flutterDir, platform) {
     const serviceAccountPath = join(flutterDir, "service_account.json");
     const apiKeyDir = join(flutterDir, "ios_api_key");
 
     let bestVersionName = null;
     let bestVersionCode = 0;
 
+    const platformLabel = platform === "ios" ? "iOS (TestFlight)" : "Android (Google Play Internal)";
+    console.log(`📦 Querying ${platformLabel} for latest version...`);
+
     // Query each app in parallel (typically only 1-3 apps per build)
     const results = await Promise.allSettled(
         appNames.map(async (appName) => {
             try {
                 const cfg = await fetchAppConfig(appName);
-                console.log(
-                    `🔍 Looking up store versions for "${appName}" (Android: ${cfg.androidPackageName}, iOS: ${cfg.iosBundleId})`,
-                );
 
-                const [android, ios] = await Promise.all([
-                    getAndroidVersion(cfg.androidPackageName, serviceAccountPath),
-                    getIOSVersion(cfg.iosBundleId, apiKeyDir),
-                ]);
+                let storeVersion = null;
 
-                if (android) {
-                    console.log(
-                        `  📱 Android: ${android.versionName} (code ${android.versionCode})`,
-                    );
-                }
-                if (ios) {
-                    console.log(
-                        `  🍎 iOS:     ${ios.versionName} (build ${ios.versionCode})`,
-                    );
+                if (platform === "ios") {
+                    console.log(`🔍 Looking up TestFlight for "${appName}" (${cfg.iosBundleId})`);
+                    storeVersion = await getIOSVersion(cfg.iosBundleId, apiKeyDir);
+                    if (storeVersion) {
+                        console.log(`  🍎 iOS: ${storeVersion.versionName} (build ${storeVersion.versionCode})`);
+                    }
+                } else {
+                    console.log(`🔍 Looking up Google Play for "${appName}" (${cfg.androidPackageName})`);
+                    storeVersion = await getAndroidVersion(cfg.androidPackageName, serviceAccountPath);
+                    if (storeVersion) {
+                        console.log(`  📱 Android: ${storeVersion.versionName} (code ${storeVersion.versionCode})`);
+                    }
                 }
 
-                return { android, ios };
+                return storeVersion;
             } catch (e) {
                 console.error(`  ❌ Skipping "${appName}": ${e.message}`);
                 return null;
@@ -334,22 +335,19 @@ export async function getLatestVersionForApps(appNames, flutterDir) {
         }),
     );
 
-    // Pick the highest version across all apps & both platforms
+    // Pick the highest version across all apps
     for (const r of results) {
         if (r.status !== "fulfilled" || !r.value) continue;
-        const { android, ios } = r.value;
+        const info = r.value;
 
-        for (const info of [android, ios]) {
-            if (!info) continue;
-            if (info.versionCode > bestVersionCode) {
-                bestVersionCode = info.versionCode;
-            }
-            if (
-                info.versionName &&
-                (!bestVersionName || compareSemver(info.versionName, bestVersionName) > 0)
-            ) {
-                bestVersionName = info.versionName;
-            }
+        if (info.versionCode > bestVersionCode) {
+            bestVersionCode = info.versionCode;
+        }
+        if (
+            info.versionName &&
+            (!bestVersionName || compareSemver(info.versionName, bestVersionName) > 0)
+        ) {
+            bestVersionName = info.versionName;
         }
     }
 
@@ -362,7 +360,7 @@ export async function getLatestVersionForApps(appNames, flutterDir) {
 
     const next = incrementVersion(bestVersionName, bestVersionCode);
     console.log(
-        `📦 Store latest: ${bestVersionName} (${bestVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
+        `📦 ${platformLabel} latest: ${bestVersionName} (${bestVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
     );
     return next;
 }

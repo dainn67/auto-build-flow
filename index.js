@@ -172,9 +172,13 @@ client.on(Events.MessageCreate, async (discordMessage) => {
           `${discordMessage.author} 🔍 Fetching latest version from stores for: ${appNames.join(", ")}...`,
         );
 
+        // Detect platform from command: "build.sh a" → android, "build.sh i" → ios
+        const platform = command.includes("build.sh i") ? "ios" : "android";
+
         const { versionName, buildNumber } = await getLatestVersionForApps(
           appNames,
           dir,
+          platform,
         );
 
         // Replace placeholder version in the script
