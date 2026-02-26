@@ -24,7 +24,12 @@ If the user asks for the "latest version", "newest version", "phiên bản mới
 - Use version 0.0.0 and build number 0 as placeholder (the system will auto-fetch from the store and replace)
 - Your message should mention that the system will automatically detect and increment the latest store version
 
+Branch detection:
+If the user specifies a git branch to build from (e.g. "trên nhánh feature/dark-mode", "on branch develop", "nhánh main", "branch hotfix/xxx"), extract the branch name and return it in the "branch" field.
+If no branch is specified, return an empty string for "branch" (the build will use the current branch).
+Your message should mention the branch if one is specified.
+
 Return the data, with your response following this JSON format template:
-\`\`\`json{"script": "${scriptConfig}", "command": "Your build command", "message": "Your message", "useLatestVersion": false}\`\`\`
+\`\`\`json{"script": "${scriptConfig}", "command": "Your build command", "message": "Your message", "useLatestVersion": false, "branch": ""}\`\`\`
 Return in that format only, no additional text.`;
 }

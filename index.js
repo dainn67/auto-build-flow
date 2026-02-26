@@ -127,8 +127,13 @@ client.on(Events.MessageCreate, async (discordMessage) => {
           description:
             "Whether to auto-fetch the latest version from the store and increment it",
         },
+        branch: {
+          type: "string",
+          description:
+            "Git branch name to checkout before building. Empty string means stay on current branch.",
+        },
       },
-      required: ["script", "command", "message", "useLatestVersion"],
+      required: ["script", "command", "message", "useLatestVersion", "branch"],
     };
 
     // Get AI analysis with structured JSON output
@@ -140,6 +145,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     let script = aiResponseObj.script;
     const command = aiResponseObj.command;
     const useLatestVersion = aiResponseObj.useLatestVersion;
+    const branch = aiResponseObj.branch;
 
     if (!aiResponseObj || !botMessage || !script || !command) {
       return;
@@ -211,6 +217,24 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     await replaceFileContent(`${dir}/apps.sh`, script);
 
     isBuilding = true;
+
+    // ── Git checkout if branch is specified ──
+    if (branch) {
+      await discordMessage.channel.send(
+        `${discordMessage.author} 🔀 Switching to branch: **${branch}**...`,
+      );
+      const checkoutResult = await executeCommand(
+        `cd ${dir} && git fetch origin && git checkout ${branch} && git pull origin ${branch}`,
+      );
+      if (!checkoutResult.success) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Failed to checkout branch **${branch}**: ${checkoutResult.stderr || checkoutResult.message}`,
+        );
+        isBuilding = false;
+        return;
+      }
+    }
+
     await executeCommand(`cd ${dir} && ./${command}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
