@@ -234,14 +234,29 @@ client.on(Events.MessageCreate, async (discordMessage) => {
 
       // If exact match fails, try fuzzy search on remote branches
       if (!checkoutResult.success) {
-        const searchResult = await executeCommand(
-          `cd ${dir} && git branch -r | grep -i "${branch}" | sed 's|origin/||' | xargs`,
-        );
+        // Build search patterns: original, spaces→underscores, spaces→hyphens, no spaces
+        const patterns = [
+          ...new Set([
+            branch,
+            branch.replace(/\s+/g, "_"),
+            branch.replace(/\s+/g, "-"),
+            branch.replace(/\s+/g, ""),
+          ]),
+        ];
 
-        const candidates = (searchResult.stdout || "")
-          .trim()
-          .split(/\s+/)
-          .filter(Boolean);
+        let candidates = [];
+        for (const pattern of patterns) {
+          const searchResult = await executeCommand(
+            `cd ${dir} && git branch -r | grep -i "${pattern}" | sed 's|origin/||' | xargs`,
+          );
+          const found = (searchResult.stdout || "")
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          candidates.push(...found);
+        }
+        // Deduplicate
+        candidates = [...new Set(candidates)];
 
         if (candidates.length === 1) {
           // Found exactly one match → use it
