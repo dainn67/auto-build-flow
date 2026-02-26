@@ -288,8 +288,15 @@ client.on(Events.MessageCreate, async (discordMessage) => {
         isBuilding = false;
         return;
       }
+
+      await discordMessage.channel.send(
+        `${discordMessage.author} ✅ Switched to branch **${branch}** successfully.`,
+      );
     }
 
+    await discordMessage.channel.send(
+      `${discordMessage.author} 🔨 Starting build...`,
+    );
     await executeCommand(`cd ${dir} && ./${command}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
