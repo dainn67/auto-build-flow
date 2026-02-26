@@ -4,6 +4,11 @@ import GeminiService from "./services/gemini.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
 import { createMessagePrompt } from "./prompts/auto-build-prompt.js";
 import { replaceFileContent, executeCommand } from "./utils.js";
+import {
+  getLatestVersionForApps,
+  parseAppNamesFromScript,
+  replaceVersionInScript,
+} from "./services/store-version.js";
 
 // Load environment variables
 dotenv.config();
@@ -117,8 +122,13 @@ client.on(Events.MessageCreate, async (discordMessage) => {
           type: "string",
           description: "A short response message to the user",
         },
+        useLatestVersion: {
+          type: "boolean",
+          description:
+            "Whether to auto-fetch the latest version from the store and increment it",
+        },
       },
-      required: ["script", "command", "message"],
+      required: ["script", "command", "message", "useLatestVersion"],
     };
 
     // Get AI analysis with structured JSON output
@@ -127,11 +137,57 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     });
 
     const botMessage = aiResponseObj.message;
-    const script = aiResponseObj.script;
+    let script = aiResponseObj.script;
     const command = aiResponseObj.command;
+    const useLatestVersion = aiResponseObj.useLatestVersion;
 
     if (!aiResponseObj || !botMessage || !script || !command) {
       return;
+    }
+
+    // Flutter project directory (contains credentials & build scripts)
+    const dir =
+      process.env.FLUTTER_PROJECT_DIR ||
+      "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
+    // const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
+
+    // ── Auto-fetch latest store version if requested ──
+    if (useLatestVersion) {
+      try {
+        const appNames = parseAppNamesFromScript(script);
+        if (appNames.length === 0) {
+          await discordMessage.channel.send(
+            `${discordMessage.author} ⚠️ Could not detect app names from the script.`,
+          );
+          return;
+        }
+
+        await discordMessage.channel.send(
+          `${discordMessage.author} 🔍 Fetching latest version from stores for: ${appNames.join(", ")}...`,
+        );
+
+        const { versionName, buildNumber } = await getLatestVersionForApps(
+          appNames,
+          dir,
+        );
+
+        // Replace placeholder version in the script
+        script = replaceVersionInScript(script, versionName, buildNumber);
+
+        await discordMessage.channel.send(
+          `${discordMessage.author} ✅ Detected next version: **${versionName}** (build ${buildNumber})`,
+        );
+
+        console.log(
+          `✅ Auto-detected next version: ${versionName} (${buildNumber})`,
+        );
+      } catch (err) {
+        console.error("❌ Failed to fetch latest version:", err);
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Failed to detect latest store version: ${err.message}`,
+        );
+        return;
+      }
     }
 
     // Check if a build is already in progress
@@ -149,8 +205,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
-    const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
-    // const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
+
 
     // Replace the app script
     await replaceFileContent(`${dir}/apps.sh`, script);
