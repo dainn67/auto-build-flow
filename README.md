@@ -34,7 +34,7 @@ Edit `.env` with your tokens and IDs:
 DISCORD_BOT_TOKEN=your_actual_bot_token_here
 TARGET_CHANNEL_ID=123456789012345678
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_MODEL=gemini-3-flash-preview
 HOST=0.0.0.0
 PORT=8080
 ```
@@ -148,7 +148,7 @@ MESSAGE RECEIVED:
 ================================================================================
 
 📤 Processing message with Gemini AI...
-🤖 Sending prompt to Gemini (gemini-2.0-flash-exp)...
+🤖 Sending prompt to Gemini (gemini-3-flash-preview)...
 Prompt length: 453 characters
 ✅ Received response from Gemini
 Response length: 287 characters

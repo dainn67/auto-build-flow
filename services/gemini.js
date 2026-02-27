@@ -4,11 +4,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
  * Gemini AI Service for processing messages
  */
 class GeminiService {
-  constructor(apiKey, modelName = 'gemini-2.0-flash-001') {
+  constructor(apiKey, modelName = 'gemini-3-flash-preview') {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is required');
     }
-    
+
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = this.genAI.getGenerativeModel({ model: modelName });
     this.modelName = modelName;
@@ -22,19 +22,29 @@ class GeminiService {
    */
   async generateWithSchema(prompt, schema) {
     try {
-      const model = this.genAI.getGenerativeModel({ 
+      const model = this.genAI.getGenerativeModel({
         model: this.modelName,
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: schema
         }
       });
-      
+
       const result = await model.generateContent(prompt);
-      const response = await result.response;
+      const response = result.response;
+
+      // 1. Access the usage metadata
+      const usage = response.usageMetadata;
+      console.log(`Tokens used: Prompt: ${usage.promptTokenCount}, Response: ${usage.candidatesTokenCount}, Total: ${usage.totalTokenCount}`);
+
       const text = response.text();
-      
-      return JSON.parse(text);
+      const parsedData = JSON.parse(text);
+
+      // You can return them together
+      return {
+        data: parsedData,
+        usage: usage
+      };
     } catch (error) {
       console.error('❌ Error calling Gemini API with schema:', error.message);
       throw error;
@@ -51,7 +61,7 @@ class GeminiService {
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
-      
+
       return text;
     } catch (error) {
       console.error('❌ Error calling Gemini API:', error.message);
@@ -67,19 +77,19 @@ class GeminiService {
   async generateJSON(prompt) {
     try {
       const text = await this.generate(prompt);
-      
+
       // Try to extract JSON from the response (in case it's wrapped in markdown)
       let jsonText = text.trim();
-      
+
       // Remove markdown code blocks if present
       if (jsonText.startsWith('```json')) {
         jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
       } else if (jsonText.startsWith('```')) {
         jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
       }
-      
+
       const parsed = JSON.parse(jsonText);
-      
+
       return parsed;
     } catch (error) {
       console.error('❌ Error parsing JSON from Gemini response:', error.message);
