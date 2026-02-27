@@ -138,8 +138,6 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     });
 
     const intent = aiResponseObj.intent;
-    console.log(`🤖 AI Response — intent: "${intent}", message: "${aiResponseObj.message}"`);
-    console.log(`   Full response:`, JSON.stringify(aiResponseObj, null, 2));
 
     // ── Intent: none → ignore ──
     if (!intent || intent === "none") {
