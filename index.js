@@ -4,15 +4,43 @@ import GeminiService from "./services/gemini.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
 import { createMessagePrompt } from "./prompts/auto-build-prompt.js";
 import { replaceFileContent, executeCommand } from "./utils.js";
+import {
+  getLatestVersionForApps,
+  parseAppNamesFromScript,
+  replaceVersionInScript,
+  getVersionsReport,
+} from "./services/store-version.js";
 
 // Load environment variables
 dotenv.config();
+
+/**
+ * Split a long message into smaller chunks respecting Discord's character limit.
+ * Splits at newline boundaries when possible.
+ */
+function splitMessage(text, maxLength = 1900) {
+  if (text.length <= maxLength) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      break;
+    }
+    let splitAt = remaining.lastIndexOf("\n", maxLength);
+    if (splitAt === -1 || splitAt < maxLength / 2) splitAt = maxLength;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\n/, "");
+  }
+  return chunks;
+}
+
 
 // Configuration from environment variables
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const TARGET_CHANNEL_ID = process.env.TARGET_CHANNEL_ID;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash-001";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = parseInt(process.env.PORT || "8000", 10);
 
@@ -96,42 +124,117 @@ client.on(Events.MessageCreate, async (discordMessage) => {
   //   ].join("\n"),
   // );
 
+  // Flutter project directory (contains credentials & build scripts)
+  const dir =
+    process.env.FLUTTER_PROJECT_DIR ||
+    "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
+
   try {
-    // Create prompt from message
+    // ── Single Gemini call: detect intent (build / check_version / none) ──
     const prompt = createMessagePrompt(metadata);
 
-    // Define JSON schema for structured output
-    const responseSchema = {
-      type: "object",
-      properties: {
-        script: {
-          type: "string",
-          description:
-            "The build script content with version, build number, and app list",
-        },
-        command: {
-          type: "string",
-          description: "The build command to execute",
-        },
-        message: {
-          type: "string",
-          description: "A short response message to the user",
-        },
-      },
-      required: ["script", "command", "message"],
-    };
-
-    // Get AI analysis with structured JSON output
     const aiResponseObj = await geminiService.processMessage(prompt, {
-      schema: responseSchema,
+      isJSON: true,
     });
 
-    const botMessage = aiResponseObj.message;
-    const script = aiResponseObj.script;
-    const command = aiResponseObj.command;
+    const intent = aiResponseObj.intent;
 
-    if (!aiResponseObj || !botMessage || !script || !command) {
+    // ── Intent: none → ignore ──
+    if (!intent || intent === "none") {
       return;
+    }
+
+    // ── Intent: check_version → fetch & report store versions ──
+    if (intent === "check_version") {
+      const apps = aiResponseObj.checkVersionApps || [];
+      const platform = aiResponseObj.checkVersionPlatform || "all";
+      const cvMessage = aiResponseObj.message;
+
+      if (apps.length === 0) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ⚠️ Không tìm thấy app nào trong yêu cầu.`,
+        );
+        return;
+      }
+
+      if (cvMessage) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ${cvMessage}`,
+        );
+      }
+      await discordMessage.channel.send(
+        `${discordMessage.author} 🔍 Đang lấy version từ store cho: **${apps.join(", ")}**...`,
+      );
+
+      try {
+        const report = await getVersionsReport(apps, dir, platform);
+        const chunks = splitMessage(report, 1900);
+        for (const chunk of chunks) {
+          await discordMessage.channel.send(
+            `${discordMessage.author}\n${chunk}`,
+          );
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch versions:", err);
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`,
+        );
+      }
+      return;
+    }
+
+    // ── Intent: build ──
+    const botMessage = aiResponseObj.message;
+    let script = aiResponseObj.script;
+    const command = aiResponseObj.command;
+    const useLatestVersion = aiResponseObj.useLatestVersion;
+    const branch = aiResponseObj.branch;
+
+    if (!botMessage || !script || !command) {
+      return;
+    }
+
+    // ── Auto-fetch latest store version if requested ──
+    if (useLatestVersion) {
+      try {
+        const appNames = parseAppNamesFromScript(script);
+        if (appNames.length === 0) {
+          await discordMessage.channel.send(
+            `${discordMessage.author} ⚠️ Could not detect app names from the script.`,
+          );
+          return;
+        }
+
+        await discordMessage.channel.send(
+          `${discordMessage.author} 🔍 Fetching latest version from stores for: ${appNames.join(", ")}...`,
+        );
+
+        // Detect platform from command: "build.sh a" → android, "build.sh i" → ios
+        const platform = command.includes("build.sh i") ? "ios" : "android";
+
+        const { versionName, buildNumber } = await getLatestVersionForApps(
+          appNames,
+          dir,
+          platform,
+        );
+
+        // Replace placeholder version in the script
+        script = replaceVersionInScript(script, versionName, buildNumber);
+
+        await discordMessage.channel.send(
+          `${discordMessage.author} ✅ Detected next version: **${versionName}** (build ${buildNumber})`,
+        );
+
+        console.log(
+          `✅ Auto-detected next version: ${versionName} (${buildNumber})`,
+        );
+      } catch (err) {
+        console.error("❌ Failed to fetch latest version:", err);
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Failed to detect latest store version: ${err.message}`,
+        );
+        return;
+      }
     }
 
     // Check if a build is already in progress
@@ -149,13 +252,88 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
-    const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
-    // const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
+
 
     // Replace the app script
     await replaceFileContent(`${dir}/apps.sh`, script);
 
     isBuilding = true;
+
+    // ── Git checkout if branch is specified ──
+    if (branch) {
+      await discordMessage.channel.send(
+        `${discordMessage.author} 🔀 Switching to branch: **${branch}**...`,
+      );
+
+      // Fetch latest remote branches
+      await executeCommand(`cd ${dir} && git fetch origin`);
+
+      // Try exact checkout first
+      let checkoutResult = await executeCommand(
+        `cd ${dir} && git checkout ${branch} && git pull origin ${branch}`,
+      );
+
+      // If exact match fails, try fuzzy search on remote branches
+      if (!checkoutResult.success) {
+        // Build search patterns: original, spaces→underscores, spaces→hyphens, no spaces
+        const patterns = [
+          ...new Set([
+            branch,
+            branch.replace(/\s+/g, "_"),
+            branch.replace(/\s+/g, "-"),
+            branch.replace(/\s+/g, ""),
+          ]),
+        ];
+
+        let candidates = [];
+        for (const pattern of patterns) {
+          const searchResult = await executeCommand(
+            `cd ${dir} && git branch -r | grep -i "${pattern}" | sed 's|origin/||' | xargs`,
+          );
+          const found = (searchResult.stdout || "")
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          candidates.push(...found);
+        }
+        // Deduplicate
+        candidates = [...new Set(candidates)];
+
+        if (candidates.length === 1) {
+          // Found exactly one match → use it
+          const matched = candidates[0];
+          await discordMessage.channel.send(
+            `${discordMessage.author} 🔍 Branch **${branch}** not found, using match: **${matched}**`,
+          );
+          checkoutResult = await executeCommand(
+            `cd ${dir} && git checkout ${matched} && git pull origin ${matched}`,
+          );
+        } else if (candidates.length > 1) {
+          // Multiple matches → ask user to be more specific
+          await discordMessage.channel.send(
+            `${discordMessage.author} ⚠️ Multiple branches match "**${branch}**":\n${candidates.map((c) => `• \`${c}\``).join("\n")}\nPlease specify the full branch name.`,
+          );
+          isBuilding = false;
+          return;
+        }
+      }
+
+      if (!checkoutResult.success) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Failed to checkout branch **${branch}**: ${checkoutResult.stderr || checkoutResult.message}`,
+        );
+        isBuilding = false;
+        return;
+      }
+
+      await discordMessage.channel.send(
+        `${discordMessage.author} ✅ Switched to branch **${branch}** successfully.`,
+      );
+    }
+
+    await discordMessage.channel.send(
+      `${discordMessage.author} 🔨 Starting build...`,
+    );
     await executeCommand(`cd ${dir} && ./${command}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
