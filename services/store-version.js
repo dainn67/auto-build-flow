@@ -389,3 +389,91 @@ export function replaceVersionInScript(script, versionName, buildNumber) {
         .replace(/VERSION=\S+/, `VERSION=${versionName}`)
         .replace(/BUILD_NUMBER=\S+/, `BUILD_NUMBER=${buildNumber}`);
 }
+
+/**
+ * Fetch the current store version for a list of apps and return a formatted report.
+ * Unlike getLatestVersionForApps, this does NOT increment – it reports what's live.
+ *
+ * @param {string[]} appNames   – e.g. ["asvab", "cdl"] or all apps
+ * @param {string}   flutterDir – root of the Flutter project
+ * @param {string}   platform   – "android", "ios", or "all"
+ * @returns {Promise<string>}   – Discord-friendly markdown report
+ */
+export async function getVersionsReport(appNames, flutterDir, platform) {
+    const serviceAccountPath = join(flutterDir, "service_account.json");
+    const apiKeyDir = join(flutterDir, "ios_api_key");
+
+    const checkAndroid = platform === "android" || platform === "all";
+    const checkIOS = platform === "ios" || platform === "all";
+
+    const rows = [];
+
+    // Process each app (parallel per app, sequential per platform inside)
+    const results = await Promise.allSettled(
+        appNames.map(async (appName) => {
+            try {
+                const cfg = await fetchAppConfig(appName);
+
+                let androidInfo = null;
+                let iosInfo = null;
+
+                if (checkAndroid) {
+                    androidInfo = await getAndroidVersion(
+                        cfg.androidPackageName,
+                        serviceAccountPath,
+                    );
+                }
+
+                if (checkIOS) {
+                    iosInfo = await getIOSVersion(cfg.iosBundleId, apiKeyDir);
+                }
+
+                return { appName, androidInfo, iosInfo };
+            } catch (e) {
+                console.error(`  ❌ Error fetching version for "${appName}": ${e.message}`);
+                return { appName, androidInfo: null, iosInfo: null, error: e.message };
+            }
+        }),
+    );
+
+    // Build the report
+    for (const r of results) {
+        if (r.status !== "fulfilled") continue;
+        const { appName, androidInfo, iosInfo, error } = r.value;
+
+        if (error) {
+            rows.push(`❌ **${appName}**: Error – ${error}`);
+            continue;
+        }
+
+        const parts = [`📱 **${appName}**`];
+
+        if (checkAndroid) {
+            if (androidInfo && androidInfo.versionName) {
+                parts.push(`  Android: \`${androidInfo.versionName}\` (code ${androidInfo.versionCode})`);
+            } else {
+                parts.push(`  Android: _not found_`);
+            }
+        }
+
+        if (checkIOS) {
+            if (iosInfo && iosInfo.versionName) {
+                parts.push(`  iOS: \`${iosInfo.versionName}\` (build ${iosInfo.versionCode})`);
+            } else {
+                parts.push(`  iOS: _not found_`);
+            }
+        }
+
+        rows.push(parts.join("\n"));
+    }
+
+    const platformLabel =
+        platform === "android"
+            ? "Android (Google Play)"
+            : platform === "ios"
+                ? "iOS (TestFlight)"
+                : "Android & iOS";
+
+    const header = `📦 **Store Versions – ${platformLabel}**\n${"─".repeat(35)}`;
+    return `${header}\n${rows.join("\n\n")}`;
+}

@@ -3,15 +3,39 @@ import dotenv from "dotenv";
 import GeminiService from "./services/gemini.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
 import { createMessagePrompt } from "./prompts/auto-build-prompt.js";
+import { createCheckVersionPrompt } from "./prompts/check-version-prompt.js";
 import { replaceFileContent, executeCommand } from "./utils.js";
 import {
   getLatestVersionForApps,
   parseAppNamesFromScript,
   replaceVersionInScript,
+  getVersionsReport,
 } from "./services/store-version.js";
 
 // Load environment variables
 dotenv.config();
+
+/**
+ * Split a long message into smaller chunks respecting Discord's character limit.
+ * Splits at newline boundaries when possible.
+ */
+function splitMessage(text, maxLength = 1900) {
+  if (text.length <= maxLength) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLength) {
+      chunks.push(remaining);
+      break;
+    }
+    let splitAt = remaining.lastIndexOf("\n", maxLength);
+    if (splitAt === -1 || splitAt < maxLength / 2) splitAt = maxLength;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).replace(/^\n/, "");
+  }
+  return chunks;
+}
+
 
 // Configuration from environment variables
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -101,7 +125,79 @@ client.on(Events.MessageCreate, async (discordMessage) => {
   //   ].join("\n"),
   // );
 
+  // Flutter project directory (contains credentials & build scripts)
+  const dir =
+    process.env.FLUTTER_PROJECT_DIR ||
+    "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
+
   try {
+    // ── Check if this is a "check version" request ──
+    const checkVersionPrompt = createCheckVersionPrompt(metadata);
+    const checkVersionSchema = {
+      type: "object",
+      properties: {
+        isCheckVersion: {
+          type: "boolean",
+          description: "Whether the user is asking to check app versions",
+        },
+        apps: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of app names to check",
+        },
+        platform: {
+          type: "string",
+          description: "Platform to check: android, ios, or all",
+        },
+        message: {
+          type: "string",
+          description: "Confirmation message to the user",
+        },
+      },
+      required: ["isCheckVersion", "apps", "platform", "message"],
+    };
+
+    const checkVersionResult = await geminiService.processMessage(
+      checkVersionPrompt,
+      { schema: checkVersionSchema },
+    );
+
+    if (checkVersionResult.isCheckVersion) {
+      const { apps, platform, message: cvMessage } = checkVersionResult;
+
+      if (apps.length === 0) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ⚠️ Không tìm thấy app nào trong yêu cầu.`,
+        );
+        return;
+      }
+
+      await discordMessage.channel.send(
+        `${discordMessage.author} ${cvMessage}`,
+      );
+      await discordMessage.channel.send(
+        `${discordMessage.author} 🔍 Đang lấy version từ store cho: **${apps.join(", ")}**...`,
+      );
+
+      try {
+        const report = await getVersionsReport(apps, dir, platform);
+        // Discord has a 2000-char limit, split if necessary
+        const chunks = splitMessage(report, 1900);
+        for (const chunk of chunks) {
+          await discordMessage.channel.send(
+            `${discordMessage.author}\n${chunk}`,
+          );
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch versions:", err);
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`,
+        );
+      }
+      return; // Don't continue to the build flow
+    }
+
+    // ── Build flow ──
     // Create prompt from message
     const prompt = createMessagePrompt(metadata);
 
@@ -150,12 +246,6 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     if (!aiResponseObj || !botMessage || !script || !command) {
       return;
     }
-
-    // Flutter project directory (contains credentials & build scripts)
-    const dir =
-      process.env.FLUTTER_PROJECT_DIR ||
-      "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
-    // const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
 
     // ── Auto-fetch latest store version if requested ──
     if (useLatestVersion) {
