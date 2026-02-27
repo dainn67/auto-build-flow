@@ -3,7 +3,6 @@ import dotenv from "dotenv";
 import GeminiService from "./services/gemini.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
 import { createMessagePrompt } from "./prompts/auto-build-prompt.js";
-import { createCheckVersionPrompt } from "./prompts/check-version-prompt.js";
 import { replaceFileContent, executeCommand } from "./utils.js";
 import {
   getLatestVersionForApps,
@@ -131,80 +130,16 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
 
   try {
-    // ── Check if this is a "check version" request ──
-    const checkVersionPrompt = createCheckVersionPrompt(metadata);
-    const checkVersionSchema = {
-      type: "object",
-      properties: {
-        isCheckVersion: {
-          type: "boolean",
-          description: "Whether the user is asking to check app versions",
-        },
-        apps: {
-          type: "array",
-          items: { type: "string" },
-          description: "List of app names to check",
-        },
-        platform: {
-          type: "string",
-          description: "Platform to check: android, ios, or all",
-        },
-        message: {
-          type: "string",
-          description: "Confirmation message to the user",
-        },
-      },
-      required: ["isCheckVersion", "apps", "platform", "message"],
-    };
-
-    const checkVersionResult = await geminiService.processMessage(
-      checkVersionPrompt,
-      { schema: checkVersionSchema },
-    );
-
-    if (checkVersionResult.isCheckVersion) {
-      const { apps, platform, message: cvMessage } = checkVersionResult;
-
-      if (apps.length === 0) {
-        await discordMessage.channel.send(
-          `${discordMessage.author} ⚠️ Không tìm thấy app nào trong yêu cầu.`,
-        );
-        return;
-      }
-
-      await discordMessage.channel.send(
-        `${discordMessage.author} ${cvMessage}`,
-      );
-      await discordMessage.channel.send(
-        `${discordMessage.author} 🔍 Đang lấy version từ store cho: **${apps.join(", ")}**...`,
-      );
-
-      try {
-        const report = await getVersionsReport(apps, dir, platform);
-        // Discord has a 2000-char limit, split if necessary
-        const chunks = splitMessage(report, 1900);
-        for (const chunk of chunks) {
-          await discordMessage.channel.send(
-            `${discordMessage.author}\n${chunk}`,
-          );
-        }
-      } catch (err) {
-        console.error("❌ Failed to fetch versions:", err);
-        await discordMessage.channel.send(
-          `${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`,
-        );
-      }
-      return; // Don't continue to the build flow
-    }
-
-    // ── Build flow ──
-    // Create prompt from message
+    // ── Single Gemini call: detect intent (build / check_version / none) ──
     const prompt = createMessagePrompt(metadata);
 
-    // Define JSON schema for structured output
     const responseSchema = {
       type: "object",
       properties: {
+        intent: {
+          type: "string",
+          description: "The detected intent: build, check_version, or none",
+        },
         script: {
           type: "string",
           description:
@@ -228,22 +163,77 @@ client.on(Events.MessageCreate, async (discordMessage) => {
           description:
             "Git branch name to checkout before building. Empty string means stay on current branch.",
         },
+        checkVersionApps: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of app names to check version for",
+        },
+        checkVersionPlatform: {
+          type: "string",
+          description: "Platform to check: android, ios, or all",
+        },
       },
-      required: ["script", "command", "message", "useLatestVersion", "branch"],
+      required: ["intent", "script", "command", "message", "useLatestVersion", "branch", "checkVersionApps", "checkVersionPlatform"],
     };
 
-    // Get AI analysis with structured JSON output
     const aiResponseObj = await geminiService.processMessage(prompt, {
       schema: responseSchema,
     });
 
+    const intent = aiResponseObj.intent;
+
+    // ── Intent: none → ignore ──
+    if (!intent || intent === "none") {
+      return;
+    }
+
+    // ── Intent: check_version → fetch & report store versions ──
+    if (intent === "check_version") {
+      const apps = aiResponseObj.checkVersionApps || [];
+      const platform = aiResponseObj.checkVersionPlatform || "all";
+      const cvMessage = aiResponseObj.message;
+
+      if (apps.length === 0) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ⚠️ Không tìm thấy app nào trong yêu cầu.`,
+        );
+        return;
+      }
+
+      if (cvMessage) {
+        await discordMessage.channel.send(
+          `${discordMessage.author} ${cvMessage}`,
+        );
+      }
+      await discordMessage.channel.send(
+        `${discordMessage.author} 🔍 Đang lấy version từ store cho: **${apps.join(", ")}**...`,
+      );
+
+      try {
+        const report = await getVersionsReport(apps, dir, platform);
+        const chunks = splitMessage(report, 1900);
+        for (const chunk of chunks) {
+          await discordMessage.channel.send(
+            `${discordMessage.author}\n${chunk}`,
+          );
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch versions:", err);
+        await discordMessage.channel.send(
+          `${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`,
+        );
+      }
+      return;
+    }
+
+    // ── Intent: build ──
     const botMessage = aiResponseObj.message;
     let script = aiResponseObj.script;
     const command = aiResponseObj.command;
     const useLatestVersion = aiResponseObj.useLatestVersion;
     const branch = aiResponseObj.branch;
 
-    if (!aiResponseObj || !botMessage || !script || !command) {
+    if (!botMessage || !script || !command) {
       return;
     }
 
