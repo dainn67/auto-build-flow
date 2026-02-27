@@ -133,52 +133,8 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     // ── Single Gemini call: detect intent (build / check_version / none) ──
     const prompt = createMessagePrompt(metadata);
 
-    const responseSchema = {
-      type: "object",
-      properties: {
-        intent: {
-          type: "string",
-          enum: ["build", "check_version", "none"],
-          description: "The detected intent: build, check_version, or none",
-        },
-        script: {
-          type: "string",
-          description:
-            "The build script content with version, build number, and app list",
-        },
-        command: {
-          type: "string",
-          description: "The build command to execute",
-        },
-        message: {
-          type: "string",
-          description: "A short response message to the user",
-        },
-        useLatestVersion: {
-          type: "boolean",
-          description:
-            "Whether to auto-fetch the latest version from the store and increment it",
-        },
-        branch: {
-          type: "string",
-          description:
-            "Git branch name to checkout before building. Empty string means stay on current branch.",
-        },
-        checkVersionApps: {
-          type: "array",
-          items: { type: "string" },
-          description: "List of app names to check version for",
-        },
-        checkVersionPlatform: {
-          type: "string",
-          description: "Platform to check: android, ios, or all",
-        },
-      },
-      required: ["intent", "script", "command", "message", "useLatestVersion", "branch", "checkVersionApps", "checkVersionPlatform"],
-    };
-
     const aiResponseObj = await geminiService.processMessage(prompt, {
-      schema: responseSchema,
+      isJSON: true,
     });
 
     const intent = aiResponseObj.intent;
