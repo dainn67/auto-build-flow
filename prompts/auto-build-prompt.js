@@ -19,7 +19,7 @@ If no app or only one app is provided, generate the empty list or a list with on
 If no version or build number is provided, use version 1.1.1, build number 1.
 
 IMPORTANT - Latest version detection:
-If the user asks for the "latest version", "newest version", "phiên bản mới nhất", "version mới nhất", "bản mới nhất", "tiếp theo", "next version", "kế tiếp" or similar intent meaning they want to build the NEXT version after the current one on the store, then:
+If the user asks for the latest version or similar intent meaning they want to build the NEXT version after the current one on the store, then:
 - Set "useLatestVersion" to true
 - Use version 0.0.0 and build number 0 as placeholder (the system will auto-fetch from the store and replace)
 - Your message should mention that the system will automatically detect and increment the latest store version
