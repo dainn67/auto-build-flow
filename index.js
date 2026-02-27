@@ -138,6 +138,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       properties: {
         intent: {
           type: "string",
+          enum: ["build", "check_version", "none"],
           description: "The detected intent: build, check_version, or none",
         },
         script: {
