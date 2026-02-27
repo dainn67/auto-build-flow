@@ -4,6 +4,7 @@ import GeminiService from "./services/gemini.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
 import { createMessagePrompt } from "./prompts/auto-build-prompt.js";
 import { replaceFileContent, executeCommand } from "./utils.js";
+import { getRemoteBranches, checkoutBranch } from "./services/branch.js";
 import {
   getLatestVersionForApps,
   parseAppNamesFromScript,
@@ -130,8 +131,11 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
 
   try {
+    // ── Fetch remote branches for AI matching ──
+    const branches = await getRemoteBranches(dir);
+
     // ── Single Gemini call: detect intent (build / check_version / none) ──
-    const prompt = createMessagePrompt(metadata);
+    const prompt = createMessagePrompt(metadata, branches);
 
     const aiResponseObj = await geminiService.processMessage(prompt, {
       isJSON: true,
@@ -156,15 +160,6 @@ client.on(Events.MessageCreate, async (discordMessage) => {
         );
         return;
       }
-
-      if (cvMessage) {
-        await discordMessage.channel.send(
-          `${discordMessage.author} ${cvMessage}`,
-        );
-      }
-      await discordMessage.channel.send(
-        `${discordMessage.author} 🔍 Đang lấy version từ store cho: **${apps.join(", ")}**...`,
-      );
 
       try {
         const report = await getVersionsReport(apps, dir, platform);
@@ -200,13 +195,13 @@ client.on(Events.MessageCreate, async (discordMessage) => {
         const appNames = parseAppNamesFromScript(script);
         if (appNames.length === 0) {
           await discordMessage.channel.send(
-            `${discordMessage.author} ⚠️ Could not detect app names from the script.`,
+            `${discordMessage.author} ⚠️ Không tìm thấy app nào trong script.`,
           );
           return;
         }
 
         await discordMessage.channel.send(
-          `${discordMessage.author} 🔍 Fetching latest version from stores for: ${appNames.join(", ")}...`,
+          `${discordMessage.author} 🔍 Đang lấy version mới nhất cho: ${appNames.join(", ")}...`,
         );
 
         // Detect platform from command: "build.sh a" → android, "build.sh i" → ios
@@ -222,7 +217,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
         script = replaceVersionInScript(script, versionName, buildNumber);
 
         await discordMessage.channel.send(
-          `${discordMessage.author} ✅ Detected next version: **${versionName}** (build ${buildNumber})`,
+          `${discordMessage.author} ✅ Version tiếp theo: **${versionName}** (build ${buildNumber})`,
         );
 
         console.log(
@@ -231,7 +226,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       } catch (err) {
         console.error("❌ Failed to fetch latest version:", err);
         await discordMessage.channel.send(
-          `${discordMessage.author} ❌ Failed to detect latest store version: ${err.message}`,
+          `${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`,
         );
         return;
       }
@@ -241,7 +236,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     if (isBuilding) {
       try {
         await discordMessage.channel.send(
-          `${discordMessage.author} ⏳ Please wait for the current build to finish.`,
+          `${discordMessage.author} ⏳ Vui lòng chờ build hiện tại hoàn tất.`,
         );
       } catch (error) {
         console.error("Failed to send build busy message:", error);
@@ -262,77 +257,26 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     // ── Git checkout if branch is specified ──
     if (branch) {
       await discordMessage.channel.send(
-        `${discordMessage.author} 🔀 Switching to branch: **${branch}**...`,
+        `${discordMessage.author} 🔀 Đang chuyển sang nhánh: **${branch}**...`,
       );
 
-      // Fetch latest remote branches
-      await executeCommand(`cd ${dir} && git fetch origin`);
+      const branchResult = await checkoutBranch(branch, dir);
 
-      // Try exact checkout first
-      let checkoutResult = await executeCommand(
-        `cd ${dir} && git checkout ${branch} && git pull origin ${branch}`,
-      );
-
-      // If exact match fails, try fuzzy search on remote branches
-      if (!checkoutResult.success) {
-        // Build search patterns: original, spaces→underscores, spaces→hyphens, no spaces
-        const patterns = [
-          ...new Set([
-            branch,
-            branch.replace(/\s+/g, "_"),
-            branch.replace(/\s+/g, "-"),
-            branch.replace(/\s+/g, ""),
-          ]),
-        ];
-
-        let candidates = [];
-        for (const pattern of patterns) {
-          const searchResult = await executeCommand(
-            `cd ${dir} && git branch -r | grep -i "${pattern}" | sed 's|origin/||' | xargs`,
-          );
-          const found = (searchResult.stdout || "")
-            .trim()
-            .split(/\s+/)
-            .filter(Boolean);
-          candidates.push(...found);
-        }
-        // Deduplicate
-        candidates = [...new Set(candidates)];
-
-        if (candidates.length === 1) {
-          // Found exactly one match → use it
-          const matched = candidates[0];
-          await discordMessage.channel.send(
-            `${discordMessage.author} 🔍 Branch **${branch}** not found, using match: **${matched}**`,
-          );
-          checkoutResult = await executeCommand(
-            `cd ${dir} && git checkout ${matched} && git pull origin ${matched}`,
-          );
-        } else if (candidates.length > 1) {
-          // Multiple matches → ask user to be more specific
-          await discordMessage.channel.send(
-            `${discordMessage.author} ⚠️ Multiple branches match "**${branch}**":\n${candidates.map((c) => `• \`${c}\``).join("\n")}\nPlease specify the full branch name.`,
-          );
-          isBuilding = false;
-          return;
-        }
-      }
-
-      if (!checkoutResult.success) {
+      if (!branchResult.success) {
         await discordMessage.channel.send(
-          `${discordMessage.author} ❌ Failed to checkout branch **${branch}**: ${checkoutResult.stderr || checkoutResult.message}`,
+          `${discordMessage.author} ❌ Lỗi chuyển nhánh: ${branchResult.message}`,
         );
         isBuilding = false;
         return;
       }
 
       await discordMessage.channel.send(
-        `${discordMessage.author} ✅ Switched to branch **${branch}** successfully.`,
+        `${discordMessage.author} ✅ Đã chuyển sang nhánh **${branch}**`,
       );
     }
 
     await discordMessage.channel.send(
-      `${discordMessage.author} 🔨 Starting build...`,
+      `${discordMessage.author} 🔨 Đang bắt đầu build...`,
     );
     await executeCommand(`cd ${dir} && ./${command}`);
   } catch (error) {

@@ -442,38 +442,29 @@ export async function getVersionsReport(appNames, flutterDir, platform) {
         const { appName, androidInfo, iosInfo, error } = r.value;
 
         if (error) {
-            rows.push(`❌ **${appName}**: Error – ${error}`);
+            rows.push(`❌ **${appName}** — Error`);
             continue;
         }
 
-        const parts = [`📱 **${appName}**`];
-
+        const parts = [];
         if (checkAndroid) {
-            if (androidInfo && androidInfo.versionName) {
-                parts.push(`  Android: \`${androidInfo.versionName}\` (code ${androidInfo.versionCode})`);
-            } else {
-                parts.push(`  Android: _not found_`);
-            }
+            parts.push(androidInfo?.versionName
+                ? `Android: \`${androidInfo.versionName}\` (${androidInfo.versionCode})`
+                : `Android: —`);
         }
-
         if (checkIOS) {
-            if (iosInfo && iosInfo.versionName) {
-                parts.push(`  iOS: \`${iosInfo.versionName}\` (build ${iosInfo.versionCode})`);
-            } else {
-                parts.push(`  iOS: _not found_`);
-            }
+            parts.push(iosInfo?.versionName
+                ? `iOS: \`${iosInfo.versionName}\` (${iosInfo.versionCode})`
+                : `iOS: —`);
         }
 
-        rows.push(parts.join("\n"));
+        rows.push(`**${appName}** — ${parts.join(" | ")}`);
     }
 
     const platformLabel =
-        platform === "android"
-            ? "Android (Google Play)"
-            : platform === "ios"
-                ? "iOS (TestFlight)"
+        platform === "android" ? "Google Play"
+            : platform === "ios" ? "TestFlight"
                 : "Android & iOS";
 
-    const header = `📦 **Store Versions – ${platformLabel}**\n${"─".repeat(35)}`;
-    return `${header}\n${rows.join("\n\n")}`;
+    return `📦 **${platformLabel}**\n${rows.join("\n")}`;
 }
