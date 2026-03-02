@@ -75,22 +75,26 @@ export async function handleAutoBuildMessage(discordMessage) {
 
     if (!command || !version || !buildNumber) return;
 
+    const botResponse = `${discordMessage.author}\n${botMessage}`;
+    await discordMessage.channel.send(botResponse);
+
     // ── Auto-fetch latest store version if requested ──
+    let actualVersionName = "";
+    let actualBuildNumber = 0;
     if (useLatestVersion) {
       try {
         console.log("useLatestVersion", useLatestVersion);
         const platform = command.includes("build.sh i") ? "ios" : "android";
-        const { versionName, buildNumber } = await getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform);
-        await discordMessage.channel.send(`✅ Version tiếp theo: **${versionName}** (build ${buildNumber})`);
+        const storeVersion = await getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform);
+        actualVersionName = storeVersion.versionName;
+        actualBuildNumber = storeVersion.buildNumber;
+        await discordMessage.channel.send(`Version tiếp theo: **${actualVersionName}** (build ${actualBuildNumber})`);
       } catch (err) {
         console.error("❌ Failed to fetch latest version:", err);
         await discordMessage.channel.send(`${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`);
         return;
       }
     }
-
-    const botResponse = `${discordMessage.author}\n${botMessage}`;
-    await discordMessage.channel.send(botResponse);
 
     buildState = true;
 
@@ -104,11 +108,11 @@ export async function handleAutoBuildMessage(discordMessage) {
         return;
       }
 
-      await discordMessage.channel.send(`✅ Đã chuyển sang nhánh **${branch}**`);
+      await discordMessage.channel.send(`Đã chuyển sang nhánh **${branch}**`);
     }
 
     await discordMessage.channel.send(`Đang bắt đầu build...`);
-    await executeCommand(`cd ${dir} && ./${command} ${version} ${buildNumber}`);
+    await executeCommand(`cd ${dir} && ./${command} ${actualVersionName} ${actualBuildNumber}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
 

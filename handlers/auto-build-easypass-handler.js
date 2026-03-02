@@ -164,7 +164,7 @@ export async function handleAutoBuildMessage(discordMessage) {
         return;
       }
 
-      await discordMessage.channel.send(` ✅ Đã chuyển sang nhánh **${branch}**`);
+      await discordMessage.channel.send(`Đã chuyển sang nhánh **${branch}**`);
     }
 
     await discordMessage.channel.send(`Đang bắt đầu build...`);
