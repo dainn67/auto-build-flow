@@ -5,7 +5,7 @@ A minimal Express backend service that connects to Discord using a bot token, li
 ## Features
 
 - 🤖 Discord bot integration with message listening
-- 🧠 Gemini 2.0 Flash AI processing for message analysis
+- 🧠 Gemini 3 Flash AI processing for message analysis
 - 📊 Automatic message categorization and sentiment analysis
 - 💬 AI-powered responses in Discord
 - 📝 Structured prompt management

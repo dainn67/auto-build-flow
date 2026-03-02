@@ -1,12 +1,12 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
  * Gemini AI Service for processing messages
  */
 class GeminiService {
-  constructor(apiKey, modelName = 'gemini-3-flash-preview') {
+  constructor(apiKey, modelName = "gemini-3-flash-preview") {
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is required');
+      throw new Error("GEMINI_API_KEY is required");
     }
 
     this.genAI = new GoogleGenerativeAI(apiKey);
@@ -26,8 +26,8 @@ class GeminiService {
         model: this.modelName,
         generationConfig: {
           responseMimeType: "application/json",
-          responseSchema: schema
-        }
+          responseSchema: schema,
+        },
       });
 
       const result = await model.generateContent(prompt);
@@ -35,7 +35,9 @@ class GeminiService {
 
       // 1. Access the usage metadata
       const usage = response.usageMetadata;
-      console.log(`Tokens used: Prompt: ${usage.promptTokenCount}, Response: ${usage.candidatesTokenCount}, Total: ${usage.totalTokenCount}`);
+      console.log(
+        `Tokens used: Prompt: ${usage.promptTokenCount}, Response: ${usage.candidatesTokenCount}, Total: ${usage.totalTokenCount}`,
+      );
 
       const text = response.text();
       const parsedData = JSON.parse(text);
@@ -43,10 +45,10 @@ class GeminiService {
       // You can return them together
       return {
         data: parsedData,
-        usage: usage
+        usage: usage,
       };
     } catch (error) {
-      console.error('❌ Error calling Gemini API with schema:', error.message);
+      console.error("❌ Error calling Gemini API with schema:", error.message);
       throw error;
     }
   }
@@ -64,7 +66,7 @@ class GeminiService {
 
       return text;
     } catch (error) {
-      console.error('❌ Error calling Gemini API:', error.message);
+      console.error("❌ Error calling Gemini API:", error.message);
       throw error;
     }
   }
@@ -82,18 +84,21 @@ class GeminiService {
       let jsonText = text.trim();
 
       // Remove markdown code blocks if present
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
-      } else if (jsonText.startsWith('```')) {
-        jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
+      if (jsonText.startsWith("```json")) {
+        jsonText = jsonText.replace(/^```json\n/, "").replace(/\n```$/, "");
+      } else if (jsonText.startsWith("```")) {
+        jsonText = jsonText.replace(/^```\n/, "").replace(/\n```$/, "");
       }
 
       const parsed = JSON.parse(jsonText);
 
       return parsed;
     } catch (error) {
-      console.error('❌ Error parsing JSON from Gemini response:', error.message);
-      console.error('Raw response:', error.response || 'N/A');
+      console.error(
+        "❌ Error parsing JSON from Gemini response:",
+        error.message,
+      );
+      console.error("Raw response:", error.response || "N/A");
       throw error;
     }
   }
@@ -120,6 +125,22 @@ class GeminiService {
       return await this.generate(prompt);
     }
   }
+}
+
+let _instance = null;
+
+/**
+ * Returns the shared Gemini service instance (lazy-init from env).
+ * @returns {GeminiService}
+ */
+export function getGeminiService() {
+  if (!_instance) {
+    _instance = new GeminiService(
+      process.env.GEMINI_API_KEY,
+      process.env.GEMINI_MODEL || "gemini-3-flash-preview",
+    );
+  }
+  return _instance;
 }
 
 export default GeminiService;

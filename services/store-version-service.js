@@ -366,6 +366,52 @@ export async function getLatestVersionForApps(appNames, flutterDir, platform) {
 }
 
 /**
+ * Fetch the latest store version for a single package/bundle id (no CMS lookup),
+ * then return the **incremented** version ready for the next build.
+ *
+ * @param {string} packageId   – e.g. "com.wsz.quizapp" (Android package name or iOS bundle id)
+ * @param {string} flutterDir  – root of the Flutter project
+ * @param {string} platform    – "android" or "ios"
+ * @returns {{ versionName: string, buildNumber: number }}
+ */
+export async function getLatestVersionForPackageId(packageId, flutterDir, platform) {
+    const serviceAccountPath = join(flutterDir, "service_account.json");
+    const apiKeyDir = join(flutterDir, "ios_api_key");
+
+    const platformLabel = platform === "ios" ? "iOS (TestFlight)" : "Android (Google Play Internal)";
+    console.log(`📦 Querying ${platformLabel} for "${packageId}"...`);
+
+    let storeVersion = null;
+    if (platform === "ios") {
+        storeVersion = await getIOSVersion(packageId, apiKeyDir);
+        if (storeVersion) {
+            console.log(`  🍎 iOS: ${storeVersion.versionName} (build ${storeVersion.versionCode})`);
+        }
+    } else {
+        storeVersion = await getAndroidVersion(packageId, serviceAccountPath);
+        if (storeVersion) {
+            console.log(`  📱 Android: ${storeVersion.versionName} (code ${storeVersion.versionCode})`);
+        }
+    }
+
+    console.log("storeVersion", storeVersion);
+
+    const bestVersionName = storeVersion?.versionName ?? null;
+    const bestVersionCode = storeVersion?.versionCode ?? 0;
+
+    if (!bestVersionName && bestVersionCode === 0) {
+        console.log(`⚠️  No store version found – using default 1.0.1 (2)`);
+        return { versionName: "1.0.1", buildNumber: 2 };
+    }
+
+    const next = incrementVersion(bestVersionName, bestVersionCode);
+    console.log(
+        `📦 ${platformLabel} latest: ${bestVersionName} (${bestVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
+    );
+    return next;
+}
+
+/**
  * Parse app names from a generated script string.
  * Script format:
  *   VERSION=1.2.3
