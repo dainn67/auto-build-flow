@@ -394,8 +394,6 @@ export async function getLatestVersionForPackageId(packageId, flutterDir, platfo
         }
     }
 
-    console.log("storeVersion", storeVersion);
-
     const bestVersionName = storeVersion?.versionName ?? null;
     const bestVersionCode = storeVersion?.versionCode ?? 0;
 
