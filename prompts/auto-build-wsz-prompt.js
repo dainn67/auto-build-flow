@@ -14,9 +14,9 @@ User intent detection: Check if user message is a request to build app or not.
 - "none": unrelated message → return intent none and empty values for all fields.
 
 For user wants to build the app:
-- Return the selected version, build number or latest version. Default is version 1.1.1, build 1.
 - Read and detect user's specified version carefully. Eg: 111 2 means version 1.1.1 build 2
-- If user wants to build with latest version set useLatestVersion=true, version=0.0.0, build=0.
+- If user wants to build with latest or next version, set useLatestVersion=true and leave version and buildNumber empty.
+- If user specifies version and build number, set useLatestVersion=false and return the specified version and build number.
 - Command: "build.sh i" (ios, default) or "build.sh a" (android).
 ${branchRule}
 
