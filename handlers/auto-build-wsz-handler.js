@@ -78,8 +78,6 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
     let version = aiResponseObj.version;
     let buildNumber = aiResponseObj.buildNumber;
 
-    if (!command || !version || !buildNumber) return;
-
     buildState.isBuilding = true;
     locked = true;
 
