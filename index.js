@@ -38,6 +38,10 @@ const client = new Client({
 // Bot ready state
 let botReady = false;
 
+// Shared build locks (prevent concurrent builds per flow)
+const easypassBuildState = { isBuilding: false };
+const wszBuildState = { isBuilding: false };
+
 // Discord bot event handlers
 client.once(Events.ClientReady, (readyClient) => {
   botReady = true;
@@ -47,9 +51,9 @@ client.once(Events.ClientReady, (readyClient) => {
 
 client.on(Events.MessageCreate, async (discordMessage) => {
   if (discordMessage.channelId === EASYPASS_TARGET_CHANNEL_ID) {
-    await handleAutoBuildEasypass(discordMessage);
+    await handleAutoBuildEasypass(discordMessage, { buildState: easypassBuildState });
   } else if (discordMessage.channelId === WSZ_TARGET_CHANNEL_ID) {
-    await handleAutoBuildWsz(discordMessage);
+    await handleAutoBuildWsz(discordMessage, { buildState: wszBuildState });
   }
 });
 

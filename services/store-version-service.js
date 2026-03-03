@@ -359,6 +359,7 @@ export async function getLatestVersionForApps(appNames, flutterDir, platform) {
     }
 
     const next = incrementVersion(bestVersionName, bestVersionCode);
+    // const next = { versionName: bestVersionName, buildNumber: bestVersionCode + 1 };
     console.log(
         `📦 ${platformLabel} latest: ${bestVersionName} (${bestVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
     );
@@ -374,37 +375,40 @@ export async function getLatestVersionForApps(appNames, flutterDir, platform) {
  * @param {string} platform    – "android" or "ios"
  * @returns {{ versionName: string, buildNumber: number }}
  */
+// Gets the latest store version for a given package (either Android or iOS),
+// and returns the next version (incremented), ready to be used for a build.
 export async function getLatestVersionForPackageId(packageId, flutterDir, platform) {
+    // Build the paths to service account and API key needed for store queries
     const serviceAccountPath = join(flutterDir, "service_account.json");
     const apiKeyDir = join(flutterDir, "ios_api_key");
 
-    const platformLabel = platform === "ios" ? "iOS (TestFlight)" : "Android (Google Play Internal)";
-    console.log(`📦 Querying ${platformLabel} for "${packageId}"...`);
-
     let storeVersion = null;
+
+    // Fetch the version details from the right app store
     if (platform === "ios") {
+        // iOS: use app store connect API via getIOSVersion()
         storeVersion = await getIOSVersion(packageId, apiKeyDir);
-        if (storeVersion) {
-            console.log(`  🍎 iOS: ${storeVersion.versionName} (build ${storeVersion.versionCode})`);
-        }
     } else {
+        // Android: use Google Play API via getAndroidVersion()
         storeVersion = await getAndroidVersion(packageId, serviceAccountPath);
-        if (storeVersion) {
-            console.log(`  📱 Android: ${storeVersion.versionName} (code ${storeVersion.versionCode})`);
-        }
     }
 
-    const bestVersionName = storeVersion?.versionName ?? null;
-    const bestVersionCode = storeVersion?.versionCode ?? 0;
+    // Safe access/version fallback setup
+    const currentVersionName = storeVersion?.versionName ?? null;
+    const currentVersionCode = storeVersion?.versionCode ?? 0;
 
-    if (!bestVersionName && bestVersionCode === 0) {
+    // If nothing found, default to 1.0.1 (build 2)
+    if (!currentVersionName && currentVersionCode === 0) {
         console.log(`⚠️  No store version found – using default 1.0.1 (2)`);
         return { versionName: "1.0.1", buildNumber: 2 };
     }
 
-    const next = incrementVersion(bestVersionName, bestVersionCode);
+    // Increment and return next version/build number using utility function
+    // const next = incrementVersion(currentVersionName, currentVersionCode);
+    const next = { versionName: currentVersionName, buildNumber: currentVersionCode + 1 };
+
     console.log(
-        `📦 ${platformLabel} latest: ${bestVersionName} (${bestVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
+        `📦 ${packageId} latest: ${currentVersionName} (${currentVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
     );
     return next;
 }

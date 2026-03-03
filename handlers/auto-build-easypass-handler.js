@@ -1,8 +1,10 @@
-import { createMessagePrompt } from "../prompts/auto-build-prompt.js";
+import { createMessagePrompt } from "../prompts/auto-build-easypass-prompt.js";
 import { replaceFileContent, executeCommand } from "../utils.js";
 import { getRemoteBranches, checkoutBranch } from "../services/git-service.js";
 import { getGeminiService } from "../services/gemini-service.js";
 import { getLatestVersionForApps, parseAppNamesFromScript, replaceVersionInScript, getVersionsReport } from "../services/store-version-service.js";
+
+const defaultBuildState = { isBuilding: false };
 
 /**
  * Split a long message into smaller chunks respecting Discord's character limit.
@@ -34,9 +36,10 @@ function splitMessage(text, maxLength = 1900) {
  * @param {import("../services/gemini-service.js").default} options.geminiService
  * @param {{ isBuilding: boolean }} options.buildState - Shared build lock; handler reads and mutates isBuilding
  */
-export async function handleAutoBuildMessage(discordMessage) {
-  let buildState = false;
-  const dir = process.env.EASYPASS_PROJECT_DIR;
+export async function handleAutoBuildMessage(discordMessage, options = {}) {
+  const buildState = options.buildState ?? defaultBuildState;
+  const dir = options.flutterProjectDir || process.env.EASYPASS_PROJECT_DIR;
+  let locked = false;
 
   // Ignore messages from bots
   if (discordMessage.author.bot) {
@@ -99,7 +102,7 @@ export async function handleAutoBuildMessage(discordMessage) {
 
     // ── Intent: build ──
 
-    if (buildState) {
+    if (buildState.isBuilding) {
       // Builds are already in progress
       try {
         await discordMessage.channel.send(`${discordMessage.author} ⏳ Vui lòng chờ build hiện tại hoàn tất.`);
@@ -116,6 +119,9 @@ export async function handleAutoBuildMessage(discordMessage) {
     const branch = aiResponseObj.branch;
 
     if (!botMessage || !script || !command) return;
+
+    buildState.isBuilding = true;
+    locked = true;
 
     // ── Auto-fetch latest store version if requested ──
     if (useLatestVersion) {
@@ -152,15 +158,12 @@ export async function handleAutoBuildMessage(discordMessage) {
     // Replace the app script
     await replaceFileContent(`${dir}/apps.sh`, script);
 
-    buildState = true;
-
     // ── Git checkout if branch is specified ──
     if (branch) {
       const branchResult = await checkoutBranch(branch, dir);
 
       if (!branchResult.success) {
         await discordMessage.channel.send(`${discordMessage.author} ❌ Lỗi chuyển nhánh: ${branchResult.message}`);
-        buildState = false;
         return;
       }
 
@@ -178,6 +181,6 @@ export async function handleAutoBuildMessage(discordMessage) {
       console.error("Failed to send fallback reply:", replyError);
     }
   } finally {
-    buildState = false;
+    if (locked) buildState.isBuilding = false;
   }
 }

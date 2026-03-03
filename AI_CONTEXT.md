@@ -14,8 +14,8 @@ Automated app build tool: **receive user message → infer intent → generate b
 
 ## Architecture
 
-- **index.js** registers a single `MessageCreate` listener: if channel is Easypass or WSZ, it calls the corresponding handler (currently both use the same Easypass handler). Handlers are in `handlers/` so different projects can plug in different flows.
-- **Easypass flow:** `handlers/auto-build-easypass-handler.js` — `handleAutoBuildMessage(discordMessage)`. Uses `EASYPASS_PROJECT_DIR`, `prompts/auto-build-easypass-prompt.js`, and a shared Gemini service (injected via options when called; index currently passes only `discordMessage`).
+- **index.js** registers a single `MessageCreate` listener: if channel is Easypass or WSZ, it calls the corresponding handler and passes a per-flow build lock (`{ isBuilding: boolean }`). Handlers are in `handlers/` so different projects can plug in different flows.
+- **Easypass flow:** `handlers/auto-build-easypass-handler.js` — `handleAutoBuildMessage(discordMessage, options)`. Uses `EASYPASS_PROJECT_DIR`, `prompts/auto-build-easypass-prompt.js`, and a shared Gemini service (via `getGeminiService()`); `options.buildState` is used to prevent concurrent builds.
 
 ## Core Flow (Easypass handler)
 
@@ -29,8 +29,8 @@ Automated app build tool: **receive user message → infer intent → generate b
      - If build in progress: reply “please wait” and exit.
      - Validate `message`, `script`, `command`; optional `useLatestVersion`, `branch`.
      - If `useLatestVersion`: parse app names from script → `getLatestVersionForApps(...)` → `replaceVersionInScript(script, versionName, buildNumber)`.
-     - Reply with `message`, replace `dir/apps.sh` with `script`, set build lock.
-     - If `branch`: `checkoutBranch(branch, dir)`; on failure reply error, clear lock, return; on success reply “Đã chuyển sang nhánh”.
+     - Set build lock, reply with `message`, replace `dir/apps.sh` with `script`.
+     - If `branch`: `checkoutBranch(branch, dir)`; on failure reply error and return.
      - Send “Đang bắt đầu build…”, run `cd ${dir} && ./${command}` (e.g. `./build.sh a` or `./build.sh i`).
      - In `finally`: clear build lock.
 
@@ -46,7 +46,9 @@ Prompt and example JSON shape: `prompts/auto-build-easypass-prompt.js`. App list
 
 - **index.js** — Entry point. Discord client, single `MessageCreate` listener that routes by `channelId` to handlers (e.g. `handleAutoBuildEasypass`). Express health routes. Does not contain build logic.
 
-- **handlers/auto-build-easypass-handler.js** — Easypass auto-build flow. Exports `handleAutoBuildMessage(discordMessage)`. Uses `EASYPASS_PROJECT_DIR`, intent dispatch (none / check_version / build), build lock, branch and version steps, writes `apps.sh`, runs build command. Contains `splitMessage`. Expects `geminiService` to be available (currently must be passed via options or global for correctness).
+- **handlers/auto-build-easypass-handler.js** — Easypass auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `EASYPASS_PROJECT_DIR`, intent dispatch (none / check_version / build), shared build lock (`options.buildState`), branch and version steps, writes `apps.sh`, runs build command. Contains `splitMessage`.
+
+- **handlers/auto-build-wsz-handler.js** — WSZ auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `WSZ_PROJECT_DIR`, intent dispatch (none / build), shared build lock (`options.buildState`), optional branch checkout, optional “latest version” lookup via `getLatestVersionForPackageId`, then runs `./build.sh ... <version> <buildNumber>`.
 
 - **prompts/auto-build-easypass-prompt.js** — Builds the Gemini prompt: app list, branch list, intent rules, and JSON format example.
 
@@ -66,7 +68,7 @@ Prompt and example JSON shape: `prompts/auto-build-easypass-prompt.js`. App list
 
 - **Required:** `DISCORD_BOT_TOKEN`, `EASYPASS_TARGET_CHANNEL_ID`, `WSZ_TARGET_CHANNEL_ID`, `GEMINI_API_KEY`
 - **Optional:** `GEMINI_MODEL` (default `gemini-3-flash-preview`), `HOST` (default `0.0.0.0`), `PORT` (default `8000`)
-- **Per-handler:** Easypass handler uses `EASYPASS_PROJECT_DIR` (Flutter project path; no default in code).
+- **Per-handler:** Easypass uses `EASYPASS_PROJECT_DIR`; WSZ uses `WSZ_PROJECT_DIR` (Flutter project path; no default in code).
 
 ## Build Script and Command
 

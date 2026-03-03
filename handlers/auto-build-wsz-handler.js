@@ -5,6 +5,7 @@ import { getGeminiService } from "../services/gemini-service.js";
 import { getLatestVersionForPackageId } from "../services/store-version-service.js";
 
 const WSZ_APP_PACKAGE = "com.wsz.quizapp";
+const defaultBuildState = { isBuilding: false };
 
 /**
  * Handle Discord MessageCreate for the WSZ auto-build flow.
@@ -15,9 +16,10 @@ const WSZ_APP_PACKAGE = "com.wsz.quizapp";
  * @param {import("../services/gemini-service.js").default} options.geminiService
  * @param {{ isBuilding: boolean }} options.buildState - Shared build lock; handler reads and mutates isBuilding
  */
-export async function handleAutoBuildMessage(discordMessage) {
-  let buildState = false;
-  const dir = process.env.WSZ_PROJECT_DIR;
+export async function handleAutoBuildMessage(discordMessage, options = {}) {
+  const buildState = options.buildState ?? defaultBuildState;
+  const dir = options.flutterProjectDir || process.env.WSZ_PROJECT_DIR;
+  let locked = false;
 
   // Ignore messages from bots
   if (discordMessage.author.bot) {
@@ -56,8 +58,11 @@ export async function handleAutoBuildMessage(discordMessage) {
     // If no intent
     if (!intent || intent === "none") return;
 
+    // WSZ flow currently supports only "build" or "none"
+    if (intent !== "build") return;
+
     // Builds are already in progress
-    if (buildState) {
+    if (buildState.isBuilding) {
       try {
         await discordMessage.channel.send(`${discordMessage.author} ⏳ Vui lòng chờ build hiện tại hoàn tất.`);
       } catch (error) {
@@ -68,27 +73,27 @@ export async function handleAutoBuildMessage(discordMessage) {
 
     const botMessage = aiResponseObj.message;
     const command = aiResponseObj.command;
-    const version = aiResponseObj.version;
-    const buildNumber = aiResponseObj.buildNumber;
-    const useLatestVersion = aiResponseObj.useLatestVersion;
     const branch = aiResponseObj.branch;
+    const useLatestVersion = aiResponseObj.useLatestVersion;
+    let version = aiResponseObj.version;
+    let buildNumber = aiResponseObj.buildNumber;
 
     if (!command || !version || !buildNumber) return;
+
+    buildState.isBuilding = true;
+    locked = true;
 
     const botResponse = `${discordMessage.author}\n${botMessage}`;
     await discordMessage.channel.send(botResponse);
 
     // ── Auto-fetch latest store version if requested ──
-    let actualVersionName = "";
-    let actualBuildNumber = 0;
     if (useLatestVersion) {
       try {
-        console.log("useLatestVersion", useLatestVersion);
         const platform = command.includes("build.sh i") ? "ios" : "android";
         const storeVersion = await getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform);
-        actualVersionName = storeVersion.versionName;
-        actualBuildNumber = storeVersion.buildNumber;
-        await discordMessage.channel.send(`Version tiếp theo: **${actualVersionName}** (build ${actualBuildNumber})`);
+        version = storeVersion.versionName;
+        buildNumber = storeVersion.buildNumber;
+        await discordMessage.channel.send(`Version tiếp theo: **${version}** (build ${buildNumber})`);
       } catch (err) {
         console.error("❌ Failed to fetch latest version:", err);
         await discordMessage.channel.send(`${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`);
@@ -96,15 +101,12 @@ export async function handleAutoBuildMessage(discordMessage) {
       }
     }
 
-    buildState = true;
-
     // ── Git checkout if branch is specified ──
     if (branch) {
       const branchResult = await checkoutBranch(branch, dir);
 
       if (!branchResult.success) {
         await discordMessage.channel.send(`${discordMessage.author} ❌ Lỗi chuyển nhánh: ${branchResult.message}`);
-        buildState = false;
         return;
       }
 
@@ -112,7 +114,7 @@ export async function handleAutoBuildMessage(discordMessage) {
     }
 
     await discordMessage.channel.send(`Đang bắt đầu build...`);
-    await executeCommand(`cd ${dir} && ./${command} ${actualVersionName} ${actualBuildNumber}`);
+    await executeCommand(`cd ${dir} && ./${command} ${version} ${buildNumber}`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
 
@@ -122,6 +124,6 @@ export async function handleAutoBuildMessage(discordMessage) {
       console.error("Failed to send fallback reply:", replyError);
     }
   } finally {
-    buildState = false;
+    if (locked) buildState.isBuilding = false;
   }
 }
