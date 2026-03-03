@@ -1,8 +1,8 @@
 import { createWszMessagePrompt } from "../prompts/auto-build-wsz-prompt.js";
-import { replaceFileContent, executeCommand } from "../utils.js";
+import { executeCommand } from "../utils.js";
 import { getRemoteBranches, checkoutBranch } from "../services/git-service.js";
 import { getGeminiService } from "../services/gemini-service.js";
-import { getLatestVersionForPackageId, replaceVersionInScript } from "../services/store-version-service.js";
+import { getLatestVersionForPackageId } from "../services/store-version-service.js";
 
 const WSZ_APP_PACKAGE = "com.wsz.quizapp";
 
