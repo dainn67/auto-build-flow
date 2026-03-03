@@ -1,174 +1,55 @@
 import express from "express";
 import dotenv from "dotenv";
-import GeminiService from "./services/gemini.js";
+import { getGeminiService } from "./services/gemini-service.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
-import { createMessagePrompt } from "./prompts/auto-build-prompt.js";
-import { replaceFileContent, executeCommand } from "./utils.js";
+import { handleAutoBuildMessage as handleAutoBuildEasypass } from "./handlers/auto-build-easypass-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildWsz } from "./handlers/auto-build-wsz-handler.js";
 
 // Load environment variables
 dotenv.config();
 
 // Configuration from environment variables
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-const TARGET_CHANNEL_ID = process.env.TARGET_CHANNEL_ID;
+const EASYPASS_TARGET_CHANNEL_ID = process.env.EASYPASS_TARGET_CHANNEL_ID;
+const WSZ_TARGET_CHANNEL_ID = process.env.WSZ_TARGET_CHANNEL_ID;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash-001";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 const HOST = process.env.HOST || "0.0.0.0";
 const PORT = parseInt(process.env.PORT || "8000", 10);
 
 // Validate required environment variables
-if (!DISCORD_BOT_TOKEN) {
-  throw new Error("DISCORD_BOT_TOKEN environment variable is required");
-}
-if (!TARGET_CHANNEL_ID) {
-  throw new Error("TARGET_CHANNEL_ID environment variable is required");
-}
-if (!GEMINI_API_KEY) {
-  throw new Error("GEMINI_API_KEY environment variable is required");
-}
+if (!DISCORD_BOT_TOKEN) throw new Error("DISCORD_BOT_TOKEN missing");
 
-// Initialize Gemini service
-const geminiService = new GeminiService(GEMINI_API_KEY, GEMINI_MODEL);
+if (!EASYPASS_TARGET_CHANNEL_ID) throw new Error("EASYPASS_TARGET_CHANNEL_ID missing");
+
+if (!WSZ_TARGET_CHANNEL_ID) throw new Error("WSZ_TARGET_CHANNEL_ID missing");
+
+if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
+
+// Initialize Gemini service (singleton; handlers use getGeminiService())
+getGeminiService();
 console.log(`Initialized Gemini service with model: ${GEMINI_MODEL}`);
 
 // Discord client setup
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
 
 // Bot ready state
 let botReady = false;
 
-// Build state
-let isBuilding = false;
-
 // Discord bot event handlers
 client.once(Events.ClientReady, (readyClient) => {
   botReady = true;
-  console.log(
-    `Discord bot logged in as ${readyClient.user.tag} (ID: ${readyClient.user.id})`,
-  );
-  console.log(`Listening to channel ID: ${TARGET_CHANNEL_ID}`);
+  console.log(`Discord bot logged in as ${readyClient.user.tag} (ID: ${readyClient.user.id})`);
+  console.log(`Listening to channel IDs: easypass ${EASYPASS_TARGET_CHANNEL_ID}, wsz ${WSZ_TARGET_CHANNEL_ID}`);
 });
 
 client.on(Events.MessageCreate, async (discordMessage) => {
-  // Ignore messages from bots
-  if (discordMessage.author.bot) {
-    return;
-  }
-
-  // Only process messages from the target channel
-  if (discordMessage.channelId !== TARGET_CHANNEL_ID) {
-    return;
-  }
-
-  // Extract message metadata
-  const metadata = {
-    content: discordMessage.content,
-    user_id: discordMessage.author.id,
-    username: discordMessage.author.username,
-    display_name:
-      discordMessage.author.displayName || discordMessage.author.username,
-    channel_id: discordMessage.channelId,
-    channel_name: discordMessage.channel.name || "DM",
-    message_id: discordMessage.id,
-    timestamp: discordMessage.createdAt.toISOString(),
-    server_id: discordMessage.guildId || null,
-    server_name: discordMessage.guild?.name || null,
-  };
-
-  // console.log(
-  //   [
-  //     `  Content: ${metadata.content}`,
-  //     `  User ID: ${metadata.user_id}`,
-  //     `  Username: ${metadata.username}`,
-  //     `  Display Name: ${metadata.display_name}`,
-  //     `  Channel ID: ${metadata.channel_id}`,
-  //     `  Channel Name: ${metadata.channel_name}`,
-  //     `  Message ID: ${metadata.message_id}`,
-  //     `  Timestamp: ${metadata.timestamp}`,
-  //     `  Server ID: ${metadata.server_id}`,
-  //     `  Server Name: ${metadata.server_name}`,
-  //   ].join("\n"),
-  // );
-
-  try {
-    // Create prompt from message
-    const prompt = createMessagePrompt(metadata);
-
-    // Define JSON schema for structured output
-    const responseSchema = {
-      type: "object",
-      properties: {
-        script: {
-          type: "string",
-          description:
-            "The build script content with version, build number, and app list",
-        },
-        command: {
-          type: "string",
-          description: "The build command to execute",
-        },
-        message: {
-          type: "string",
-          description: "A short response message to the user",
-        },
-      },
-      required: ["script", "command", "message"],
-    };
-
-    // Get AI analysis with structured JSON output
-    const aiResponseObj = await geminiService.processMessage(prompt, {
-      schema: responseSchema,
-    });
-
-    const botMessage = aiResponseObj.message;
-    const script = aiResponseObj.script;
-    const command = aiResponseObj.command;
-
-    if (!aiResponseObj || !botMessage || !script || !command) {
-      return;
-    }
-
-    // Check if a build is already in progress
-    if (isBuilding) {
-      try {
-        await discordMessage.channel.send(
-          `${discordMessage.author} ⏳ Please wait for the current build to finish.`,
-        );
-      } catch (error) {
-        console.error("Failed to send build busy message:", error);
-      }
-      return;
-    }
-
-    const botResponse = `${discordMessage.author}\n${botMessage}`;
-    await discordMessage.channel.send(botResponse);
-
-    const dir = "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
-    // const dir = "/Users/abc-submit/StudioProjects/practice-test-app";
-
-    // Replace the app script
-    await replaceFileContent(`${dir}/apps.sh`, script);
-
-    isBuilding = true;
-    await executeCommand(`cd ${dir} && ./${command}`);
-  } catch (error) {
-    console.error(`❌ Error processing message with Gemini:`, error);
-
-    try {
-      await discordMessage.channel.send(
-        `Sent fallback confirmation reply for message ${metadata.message_id}`,
-      );
-    } catch (replyError) {
-      console.error(`Failed to send fallback reply:`, replyError);
-    }
-  } finally {
-    isBuilding = false;
+  if (discordMessage.channelId === EASYPASS_TARGET_CHANNEL_ID) {
+    await handleAutoBuildEasypass(discordMessage);
+  } else if (discordMessage.channelId === WSZ_TARGET_CHANNEL_ID) {
+    await handleAutoBuildWsz(discordMessage);
   }
 });
 
@@ -190,7 +71,8 @@ app.get("/", (req, res) => {
     status: "running",
     bot_connected: botReady,
     bot_user: client.user?.tag || null,
-    target_channel_id: TARGET_CHANNEL_ID,
+    easypass_target_channel_id: EASYPASS_TARGET_CHANNEL_ID,
+    wsz_target_channel_id: WSZ_TARGET_CHANNEL_ID,
   });
 });
 

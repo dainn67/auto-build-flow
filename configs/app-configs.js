@@ -14,6 +14,7 @@ const appNames = [
   "comptiasecurity",
   "dkt",
   "dmv",
+  "emtb",
   "epa608",
   "fsc",
   "g1",

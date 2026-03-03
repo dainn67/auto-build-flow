@@ -23,13 +23,10 @@ async function replaceFileContent(filePath, newContent) {
  */
 async function executeCommand(command) {
   return new Promise((resolve) => {
-    console.log("🔧 EXECUTING: ${command}");
+    console.log(`🔧 EXECUTING: ${command}`);
 
-    // Parse command and arguments
-    const [cmd, ...args] = command.split(" ");
-
-    // Spawn the process
-    const childProcess = spawn(cmd, args, {
+    // Run the full command string in the shell (no args to avoid DEP0190)
+    const childProcess = spawn(command, [], {
       shell: true,
     });
 
@@ -53,7 +50,6 @@ async function executeCommand(command) {
     // Handle process exit
     childProcess.on("close", (code) => {
       if (code === 0) {
-        console.log(`✅ Command executed successfully (exit code: ${code})`);
         resolve({
           success: true,
           stdout: stdout.trim(),
@@ -62,7 +58,6 @@ async function executeCommand(command) {
           exitCode: code,
         });
       } else {
-        console.log(`❌ Command failed (exit code: ${code})`);
         resolve({
           success: false,
           stdout: stdout.trim(),
