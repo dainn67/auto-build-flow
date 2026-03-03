@@ -131,11 +131,8 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     "/Users/dainguyen/StudioProjects/abc-adaptive-learning-app";
 
   try {
-    // ── Fetch remote branches for AI matching ──
-    const branches = await getRemoteBranches(dir);
-
     // ── Single Gemini call: detect intent (build / check_version / none) ──
-    const prompt = createMessagePrompt(metadata, branches);
+    const prompt = createMessagePrompt(metadata);
 
     const aiResponseObj = await geminiService.processMessage(prompt, {
       isJSON: true,
@@ -260,7 +257,23 @@ client.on(Events.MessageCreate, async (discordMessage) => {
         `${discordMessage.author} 🔀 Đang chuyển sang nhánh: **${branch}**...`,
       );
 
-      const branchResult = await checkoutBranch(branch, dir);
+      // Fetch remote branches and let AI match
+      const remoteBranches = await getRemoteBranches(dir);
+      let targetBranch = branch;
+
+      if (remoteBranches.length > 0 && !remoteBranches.includes(branch)) {
+        const matchPrompt = `Given these git branches: [${remoteBranches.join(", ")}]\nUser wants branch: "${branch}"\nReturn the closest matching branch name from the list. Return JSON only: {"branch": "exact_branch_name"}`;
+        try {
+          const matchResult = await geminiService.processMessage(matchPrompt, { isJSON: true });
+          if (matchResult.branch && remoteBranches.includes(matchResult.branch)) {
+            targetBranch = matchResult.branch;
+          }
+        } catch (e) {
+          console.error("Branch matching failed, using raw input:", e.message);
+        }
+      }
+
+      const branchResult = await checkoutBranch(targetBranch, dir);
 
       if (!branchResult.success) {
         await discordMessage.channel.send(
@@ -271,7 +284,7 @@ client.on(Events.MessageCreate, async (discordMessage) => {
       }
 
       await discordMessage.channel.send(
-        `${discordMessage.author} ✅ Đã chuyển sang nhánh **${branch}**`,
+        `${discordMessage.author} ✅ Đã chuyển sang nhánh **${targetBranch}**`,
       );
     }
 
