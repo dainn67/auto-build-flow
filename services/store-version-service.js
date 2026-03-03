@@ -261,29 +261,6 @@ function compareSemver(a, b) {
     return 0;
 }
 
-/**
- * Increment version: patch +1, build number +1
- * e.g. "1.2.3" → "1.2.4",  buildNumber 45 → 46
- */
-function incrementVersion(versionName, versionCode) {
-    let newVersion = "1.0.1";
-    let newBuild = 2;
-
-    if (versionName) {
-        const parts = versionName.split(".");
-        if (parts.length >= 3) {
-            parts[parts.length - 1] = String(parseInt(parts[parts.length - 1], 10) + 1);
-            newVersion = parts.join(".");
-        }
-    }
-
-    if (versionCode && versionCode > 0) {
-        newBuild = versionCode + 1;
-    }
-
-    return { versionName: newVersion, buildNumber: newBuild };
-}
-
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -358,8 +335,8 @@ export async function getLatestVersionForApps(appNames, flutterDir, platform) {
         return { versionName: "1.0.1", buildNumber: 2 };
     }
 
-    const next = incrementVersion(bestVersionName, bestVersionCode);
-    // const next = { versionName: bestVersionName, buildNumber: bestVersionCode + 1 };
+    // const next = incrementVersion(bestVersionName, bestVersionCode);
+    const next = { versionName: bestVersionName, buildNumber: bestVersionCode + 1 };
     console.log(
         `📦 ${platformLabel} latest: ${bestVersionName} (${bestVersionCode}) → Next build: ${next.versionName} (${next.buildNumber})`,
     );
@@ -404,7 +381,6 @@ export async function getLatestVersionForPackageId(packageId, flutterDir, platfo
     }
 
     // Increment and return next version/build number using utility function
-    // const next = incrementVersion(currentVersionName, currentVersionCode);
     const next = { versionName: currentVersionName, buildNumber: currentVersionCode + 1 };
 
     console.log(
