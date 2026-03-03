@@ -113,6 +113,7 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
     await discordMessage.channel.send(`Đang bắt đầu build...`);
     await executeCommand(`cd ${dir} && ./${command} ${version} ${buildNumber}`);
+    discordMessage.channel.send(`Build hoàn tất, xem trạng thái tại:\nhttps://appstoreconnect.apple.com/teams/ffd01a9b-8357-4f90-8f06-41ddd833612b/apps/6759789375/testflight/ios`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
 
