@@ -2,8 +2,9 @@ import express from "express";
 import dotenv from "dotenv";
 import { getGeminiService } from "./services/gemini-service.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
-import { handleAutoBuildMessage as handleAutoBuildEasypass } from "./handlers/auto-build-easypass-handler.js";
-import { handleAutoBuildMessage as handleAutoBuildWsz } from "./handlers/auto-build-wsz-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildEasypass } from "./handlers/easypass-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildWsz } from "./handlers/wsz-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildLeslie } from "./handlers/leslie-handler.js";
 
 // Load environment variables
 dotenv.config();
@@ -12,6 +13,7 @@ dotenv.config();
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const EASYPASS_TARGET_CHANNEL_ID = process.env.EASYPASS_TARGET_CHANNEL_ID;
 const WSZ_TARGET_CHANNEL_ID = process.env.WSZ_TARGET_CHANNEL_ID;
+const LESLIE_TARGET_CHANNEL_ID = process.env.LESLIE_TARGET_CHANNEL_ID;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
 const HOST = process.env.HOST || "0.0.0.0";
@@ -23,6 +25,8 @@ if (!DISCORD_BOT_TOKEN) throw new Error("DISCORD_BOT_TOKEN missing");
 if (!EASYPASS_TARGET_CHANNEL_ID) throw new Error("EASYPASS_TARGET_CHANNEL_ID missing");
 
 if (!WSZ_TARGET_CHANNEL_ID) throw new Error("WSZ_TARGET_CHANNEL_ID missing");
+
+if (!LESLIE_TARGET_CHANNEL_ID) throw new Error("LESLIE_TARGET_CHANNEL_ID missing");
 
 if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing");
 
@@ -41,12 +45,15 @@ let botReady = false;
 // Shared build locks (prevent concurrent builds per flow)
 const easypassBuildState = { isBuilding: false };
 const wszBuildState = { isBuilding: false };
+const leslieBuildState = { isBuilding: false };
 
 // Discord bot event handlers
 client.once(Events.ClientReady, (readyClient) => {
   botReady = true;
   console.log(`Discord bot logged in as ${readyClient.user.tag} (ID: ${readyClient.user.id})`);
-  console.log(`Listening to channel IDs: easypass ${EASYPASS_TARGET_CHANNEL_ID}, wsz ${WSZ_TARGET_CHANNEL_ID}`);
+  console.log(
+    `Listening to channel IDs: easypass ${EASYPASS_TARGET_CHANNEL_ID}, wsz ${WSZ_TARGET_CHANNEL_ID}, leslie ${LESLIE_TARGET_CHANNEL_ID}`,
+  );
 });
 
 client.on(Events.MessageCreate, async (discordMessage) => {
@@ -54,6 +61,8 @@ client.on(Events.MessageCreate, async (discordMessage) => {
     await handleAutoBuildEasypass(discordMessage, { buildState: easypassBuildState });
   } else if (discordMessage.channelId === WSZ_TARGET_CHANNEL_ID) {
     await handleAutoBuildWsz(discordMessage, { buildState: wszBuildState });
+  } else if (LESLIE_TARGET_CHANNEL_ID && discordMessage.channelId === LESLIE_TARGET_CHANNEL_ID) {
+    await handleAutoBuildLeslie(discordMessage, { buildState: leslieBuildState });
   }
 });
 
@@ -77,6 +86,7 @@ app.get("/", (req, res) => {
     bot_user: client.user?.tag || null,
     easypass_target_channel_id: EASYPASS_TARGET_CHANNEL_ID,
     wsz_target_channel_id: WSZ_TARGET_CHANNEL_ID,
+    leslie_target_channel_id: LESLIE_TARGET_CHANNEL_ID || null,
   });
 });
 
