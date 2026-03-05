@@ -52,7 +52,6 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
     if (!intent || intent === "none") return;
 
-
     if (intent === "submit") {
       const appNames = aiResponseObj.submitApps;
       if (appNames.length === 0) {
@@ -66,14 +65,16 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
       for (const appName of appNames) {
         const appConfig = await fetchAppConfig(appName);
-        const packageName = appConfig.packageName;
-        const bundleId = appConfig.bundleId;
+        const packageName = appConfig.androidPackageName;
+        const bundleId = appConfig.iosBundleId;
 
         const selectedPackageName = platform === "a" ? packageName : bundleId;
-        const selectedBuildNumber = buildNumber > 0 ? `${buildNumber}` : '';
+        const selectedBuildNumber = buildNumber > 0 ? `${buildNumber}` : "";
 
         await executeCommand(`cd ${dir} && ${command} ${selectedPackageName} ${selectedBuildNumber}`);
       }
+
+      return;
     }
 
     if (buildState.isBuilding) {
