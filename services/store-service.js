@@ -1,6 +1,8 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import jwt from "jsonwebtoken";
+import { getGeminiService } from "./gemini-service.js";
+import { createResolveAppNamePrompt } from "../prompts/easypass-build-prompt.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const CMS_DOMAIN =
@@ -12,18 +14,44 @@ const APP_STORE_API = "https://api.appstoreconnect.apple.com/v1";
 // ─── CMS Helper ──────────────────────────────────────────────────────────────
 
 /**
- * Fetch app config from CMS to resolve package name / bundle ID
- * @param {string} appName - e.g. "asvab", "cdl"
+ * Use Gemini to resolve a possibly-typoed app name to the exact key from the config map.
+ * @param {string} appName - User input (may have typo)
+ * @param {string[]} validKeys - All keys from the config map
+ * @returns {Promise<string>} - Exact key that best matches appName
+ */
+async function resolveAppNameToKey(appName, validKeys) {
+    if (validKeys.length === 0) {
+        throw new Error("Config map has no keys");
+    }
+    if (validKeys.length === 1) {
+        return validKeys[0];
+    }
+    const prompt = createResolveAppNamePrompt(appName, validKeys);
+    const gemini = getGeminiService();
+    const out = await gemini.processMessage(prompt, { isJSON: true });
+    const matchedKey = out?.matchedKey;
+    if (typeof matchedKey !== "string" || !validKeys.includes(matchedKey)) {
+        return validKeys[0]; // fallback to first key if AI returns invalid
+    }
+    return matchedKey;
+}
+
+/**
+ * Fetch app config from CMS to resolve package name / bundle ID.
+ * App name is matched against config keys via Gemini to tolerate typos.
+ * @param {string} appName - e.g. "asvab", "cdl" (may have typo)
  * @returns {{ androidPackageName: string, iosBundleId: string, bucket: string }}
  */
-async function fetchAppConfig(appName) {
+export async function fetchAppConfig(appName) {
     const res = await fetch(`${CMS_DOMAIN}/api/app/config/map`);
     if (!res.ok) throw new Error(`CMS request failed: ${res.status}`);
     const configMap = await res.json();
 
-    const brand = configMap[appName];
+    const keys = Object.keys(configMap);
+    const resolvedKey = await resolveAppNameToKey(appName, keys);
+    const brand = configMap[resolvedKey];
     if (!brand?.edupassAndroid) {
-        throw new Error(`App config not found for "${appName}"`);
+        throw new Error(`App config not found for "${appName}" (resolved to "${resolvedKey}")`);
     }
 
     const originalPkg = brand.edupassAndroid.packageName;

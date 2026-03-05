@@ -3,6 +3,7 @@ import { replaceFileContent, executeCommand } from "../utils.js";
 import { getRemoteBranches, checkoutBranch } from "../services/git-service.js";
 import { getGeminiService } from "../services/gemini-service.js";
 import { getLatestVersionForApps, parseAppNamesFromScript, replaceVersionInScript } from "../services/store-service.js";
+import { fetchAppConfig } from "../services/store-service.js";
 
 const defaultBuildState = { isBuilding: false };
 
@@ -41,22 +42,39 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
   try {
     const geminiService = getGeminiService();
-    // ── Fetch remote branches for AI matching ──
     const branches = await getRemoteBranches(dir);
 
-    // ── Single Gemini call: detect intent (build / check_version / none) ──
     const prompt = createMessagePrompt(metadata, branches);
-
     const aiResponseObj = await geminiService.processMessage(prompt, {
       isJSON: true,
     });
-
     const intent = aiResponseObj.intent;
 
-    // If no intent
     if (!intent || intent === "none") return;
 
-    // ── Intent: build ──
+
+    if (intent === "submit") {
+      const appNames = aiResponseObj.submitApps;
+      if (appNames.length === 0) {
+        await discordMessage.channel.send(`${discordMessage.author} ⚠️ Không tìm thấy app nào trong script.`);
+        return;
+      }
+
+      const platform = aiResponseObj.platform;
+      const command = aiResponseObj.command;
+      const buildNumber = aiResponseObj.buildNumber;
+
+      for (const appName of appNames) {
+        const appConfig = await fetchAppConfig(appName);
+        const packageName = appConfig.packageName;
+        const bundleId = appConfig.bundleId;
+
+        const selectedPackageName = platform === "a" ? packageName : bundleId;
+        const selectedBuildNumber = buildNumber > 0 ? `${buildNumber}` : '';
+
+        await executeCommand(`cd ${dir} && ${command} ${selectedPackageName} ${selectedBuildNumber}`);
+      }
+    }
 
     if (buildState.isBuilding) {
       // Builds are already in progress
