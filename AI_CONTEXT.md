@@ -14,21 +14,20 @@ Automated app build tool: **receive user message → infer intent → generate b
 
 ## Architecture
 
-- **index.js** registers a single `MessageCreate` listener: if the channel is Easypass, WSZ, or Leslie, it calls the corresponding handler and passes a per-flow build lock (`{ isBuilding: boolean }`). Handlers are in `handlers/` so different projects can plug in different flows.
-- **Easypass flow:** `handlers/easypass-handler.js` — `handleAutoBuildMessage(discordMessage, options)`. Uses `EASYPASS_PROJECT_DIR`, `prompts/easypass-prompt.js`, and a shared Gemini service (via `getGeminiService()`); `options.buildState` is used to prevent concurrent builds.
+- **index.js** registers a single `MessageCreate` listener: if the channel is Easypass, WSZ, or Leslie, it calls the corresponding handler and passes a per-flow build lock (`{ isBuilding: boolean }`). Handlers are in **build_handlers/** so different projects can plug in different flows.
+- **Easypass flow:** `build_handlers/easypass-handler.js` — `handleAutoBuildMessage(discordMessage, options)`. Uses `EASYPASS_PROJECT_DIR`, `prompts/easypass-build-prompt.js`, and shared Gemini (via `getGeminiService()`); `options.buildState` prevents concurrent builds.
 
 ## Core Flow (Easypass handler)
 
-1. User sends message in target Discord channel (Easypass or WSZ).
+1. User sends message in Easypass target Discord channel.
 2. **Branch list:** `getRemoteBranches(dir)` for AI branch matching (`dir` = `EASYPASS_PROJECT_DIR`).
-3. **Single Gemini call:** `createMessagePrompt(metadata, branches)` → `geminiService.processMessage(prompt, { isJSON: true })` → one JSON object with `intent` and intent-specific fields.
-4. **Intent handling:**
+3. **Single Gemini call:** `createMessagePrompt(metadata, branches)` from `prompts/easypass-build-prompt.js` → `geminiService.processMessage(prompt, { isJSON: true })` → one JSON object with `intent` and intent-specific fields.
+4. **Intent handling:** Handler implements **build** and **none** only. (Prompt still defines `check_version`; not implemented in handler.)
    - **none:** exit (no reply).
-   - **check_version:** `checkVersionApps`, `checkVersionPlatform` → `getVersionsReport(apps, dir, platform)` → reply with store version report (Discord chunks ≤1900 chars).
    - **build:** then:
      - If build in progress: reply “please wait” and exit.
      - Validate `message`, `script`, `command`; optional `useLatestVersion`, `branch`.
-     - If `useLatestVersion`: parse app names from script → `getLatestVersionForApps(...)` → `replaceVersionInScript(script, versionName, buildNumber)`.
+     - If `useLatestVersion`: `parseAppNamesFromScript(script)` → `getLatestVersionForApps(appNames, dir, platform)` → `replaceVersionInScript(script, versionName, buildNumber)`.
      - Set build lock, reply with `message`, replace `dir/apps.sh` with `script`.
      - If `branch`: `checkoutBranch(branch, dir)`; on failure reply error and return.
      - Send “Đang bắt đầu build…”, run `cd ${dir} && ./${command}` (e.g. `./build.sh a` or `./build.sh i`).
@@ -36,70 +35,65 @@ Automated app build tool: **receive user message → infer intent → generate b
 
 ## Intents (Gemini JSON)
 
-- **intent:** `"build"` | `"check_version"` | `"none"`.
+- **intent:** `"build"` | `"check_version"` | `"none"` (Easypass prompt; handler only implements build / none).
 - **build:** `message` (short Vietnamese reply), `script` (full `apps.sh` content), `command` (e.g. `build.sh a` / `build.sh i`), optional `useLatestVersion` (bool), optional `branch` (exact name from list or user input).
-- **check_version:** `checkVersionApps` (array of app names; empty or “all” → all apps), `checkVersionPlatform`: `"android"` | `"ios"` | `"all"`. No script/command.
+- **check_version:** Defined in prompt only; `checkVersionApps`, `checkVersionPlatform`. Not handled in handler.
 
-Prompt and example JSON shape: `prompts/easypass-prompt.js`. App list from `configs/app-configs.js`, script template from `configs/script-config.js`.
+Prompt and JSON shape: `prompts/easypass-build-prompt.js`. App list from `configs/app-configs.js`, script template from `configs/script-config.js`.
 
 ## WSZ Flow (WSZ handler)
 
 1. User sends message in WSZ target Discord channel.
 2. **Branch list:** `getRemoteBranches(dir)` for AI branch matching (`dir` = `WSZ_PROJECT_DIR`).
-3. **Single Gemini call:** `createWszMessagePrompt(metadata, branches)` → `geminiService.processMessage(prompt, { isJSON: true })` → one JSON object with `intent` and fields: `message`, `command`, `version`, `buildNumber`, `useLatestVersion`, `branch`.
-4. **Intent handling:**
+3. **Single Gemini call:** `createWszMessagePrompt(metadata, branches)` from `prompts/wsz-build-prompt.js` → `geminiService.processMessage(prompt, { isJSON: true })` → one JSON object with `intent`, `message`, `command`, `version`, `buildNumber`, `useLatestVersion`, `branch`.
+4. **Intent handling:** build / none only.
    - **none:** exit (no reply).
    - **build:** then:
      - If build in progress: reply “please wait” and exit.
      - Validate `message`, `command`; `version`/`buildNumber` may be empty if `useLatestVersion=true`.
-     - Set build lock.
-     - If `useLatestVersion`: infer platform from `command` (`build.sh i` → iOS, else Android) → `getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform)` → use returned `versionName` and `buildNumber` and inform user.
+     - Set build lock, reply with `message`.
+     - If `useLatestVersion`: infer platform from `command` (`build.sh i` → iOS, else Android) → `getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform)` → use returned `versionName` and `buildNumber`, inform user.
      - If `branch`: `checkoutBranch(branch, dir)`; on failure reply error and return.
-     - Reply with `message`, then send “Đang bắt đầu build…”, run `cd ${dir} && ./${command} <version> <buildNumber>`.
+     - Send “Đang bắt đầu build…”, run `cd ${dir} && ./${command} ${version} ${buildNumber}`.
      - In `finally`: clear build lock.
 
 ## Leslie Flow (Leslie handler)
 
 1. User sends message in Leslie target Discord channel (if configured).
 2. **No branch or store-version lookup:** Leslie flow does not use branches or store APIs; it only needs a final shell command to run from the project root.
-3. **Single Gemini call:** `createLesliePrompt(metadata)` → `geminiService.processMessage(prompt, { isJSON: true })` → one JSON object with an optional `command` field.
+3. **Single Gemini call:** `createLesliePrompt(metadata)` from `prompts/leslie-build-prompt.js` → `geminiService.processMessage(prompt, { isJSON: true })` → one JSON object with optional `message` and `command`.
 4. **Intent handling:**
-   - If `command` is missing/empty → treat as `"none"` and exit without replying.
-   - If a build is already in progress for Leslie: reply “please wait” and exit.
-   - Otherwise:
-     - Set build lock.
-     - Reply that a Leslie build is starting and echo the command.
-     - Run `cd ${LESLIE_PROJECT_DIR} && {command}` via `executeCommand`.
-     - On success/failure: send a short success/error message and (truncated) stdout/stderr to Discord.
-     - In `finally`: clear build lock.
+   - If `command` is missing/empty → exit without replying.
+   - If a build is already in progress: reply “please wait” and exit.
+   - Otherwise: set build lock; reply with `message` and command; run `cd ${dir} && {command}` via `executeCommand` (dir = `LESLIE_PROJECT_DIR` or `options.flutterProjectDir`); on success/failure send result and (truncated) stdout/stderr to Discord; in `finally` clear build lock.
 
 ## Key Files
 
-- **index.js** — Entry point. Discord client, single `MessageCreate` listener that routes by `channelId` to handlers (Easypass, WSZ, Leslie). Express health routes. Does not contain build logic; owns per-flow build lock objects and passes them into handlers.
+- **index.js** — Entry point. Discord client, single `MessageCreate` listener that routes by `channelId` to build handlers. Express health routes. Owns per-flow build lock objects and passes `{ buildState }` into each handler.
 
-- **handlers/easypass-handler.js** — Easypass auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `EASYPASS_PROJECT_DIR`, intent dispatch (none / check_version / build), shared build lock (`options.buildState`), branch and version steps, writes `apps.sh`, runs build command. Contains `splitMessage`.
+- **build_handlers/easypass-handler.js** — Easypass auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `EASYPASS_PROJECT_DIR` (or `options.flutterProjectDir`), intent dispatch (none / build only), `options.buildState`, branch and version steps, writes `apps.sh`, runs build command.
 
-- **handlers/wsz-handler.js** — WSZ auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `WSZ_PROJECT_DIR`, intent dispatch (none / build), shared build lock (`options.buildState`), optional branch checkout, optional “latest version” lookup via `getLatestVersionForPackageId`, then runs `./build.sh ... <version> <buildNumber>`.
+- **build_handlers/wsz-handler.js** — WSZ auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `WSZ_PROJECT_DIR` (or `options.flutterProjectDir`), intent (none / build), `options.buildState`, optional branch checkout, optional “latest version” via `getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform)`, runs `./build.sh ... <version> <buildNumber>`.
 
-- **handlers/leslie-handler.js** — Leslie auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `LESLIE_PROJECT_DIR`, very simple intent: AI only decides whether the message is a build command; if yes it returns a single shell `command` (including version and build number, defaulting to `1.0.0` / `1` when omitted) and the handler runs `cd {LESLIE_PROJECT_DIR} && {command}` with a per-flow build lock.
+- **build_handlers/leslie-handler.js** — Leslie auto-build flow. Exports `handleAutoBuildMessage(discordMessage, options)`. Uses `LESLIE_PROJECT_DIR` (or `options.flutterProjectDir`). AI returns `message` and `command`; if `command` present, handler runs `cd {dir} && {command}` with `options.buildState`; sends success/error and truncated stdout/stderr to Discord.
 
-- **prompts/easypass-prompt.js** — Builds the Easypass Gemini prompt: app list, branch list, intent rules (build vs check_version vs none), and JSON format example.
+- **prompts/easypass-build-prompt.js** — Exports `createMessagePrompt(messageData, branches)`. Easypass Gemini prompt: app list, branch list, intent rules (build / check_version / none), JSON format.
 
-- **prompts/wsz-prompt.js** — Builds the WSZ Gemini prompt: branch list, intent rules (build vs none), version rules (manual vs latest), and JSON format example.
+- **prompts/wsz-build-prompt.js** — Exports `createWszMessagePrompt(messageData, branches)`. WSZ Gemini prompt: branch list, intent (build / none), version rules, JSON format.
 
-- **prompts/leslie-prompt.js** — Builds the Leslie Gemini prompt: only decides if the message is a build command and, if so, returns a single `command` string (including version and build number, defaulting to `1.0.0` / `1` when omitted).
+- **prompts/leslie-build-prompt.js** — Exports `createLesliePrompt(messageData)`. Leslie Gemini prompt: decides if message is a build request; returns `message` and `command` (e.g. `python3 build.py <version> <buildNumber> <platform>`).
 
 - **services/gemini-service.js** — Gemini client. `processMessage(prompt, { isJSON, schema })`, plus `generate`, `generateJSON`, `generateWithSchema`.
 
 - **services/git-service.js** — `getRemoteBranches(dir)`, `checkoutBranch(branch, dir)` (fetch, reset, checkout, pull).
 
-- **services/store-version-service.js** — Store version: CMS app config, Google Play internal track, App Store Connect TestFlight. Exports `getLatestVersionForApps`, `getLatestVersionForPackageId`, `getVersionsReport`, `parseAppNamesFromScript`, `replaceVersionInScript`.
+- **services/store-service.js** — Store version: CMS app config, Google Play internal track, App Store Connect TestFlight. Exports: `getLatestVersionForApps`, `getLatestVersionForPackageId`, `getAllAndroidPackageNames`, `parseAppNamesFromScript`, `replaceVersionInScript`, `getVersionsReport`.
 
 - **utils.js** — `replaceFileContent(path, content)`, `executeCommand(cmd)` (spawn, stream stdout/stderr, resolve with success, stdout, stderr, exitCode).
 
 - **configs/app-configs.js** — List of app names (accuplacer, ase, asvab, etc.).
 
-- **configs/script-config.js** — Example script snippet (VERSION, BUILD_NUMBER, LIST_APP) used in the prompt.
+- **configs/script-config.js** — Example script snippet (VERSION, BUILD_NUMBER, LIST_APP) used in Easypass prompt.
 
 ## Environment
 
@@ -118,8 +112,8 @@ Platform for “latest version” is inferred from command: contains `build.sh i
 
 - **Next build version (Easypass, multiple apps):** `getLatestVersionForApps(appNames, dir, platform)` → fetches store versions (Google Play internal / TestFlight), takes max version/build across apps, returns `{ versionName, buildNumber }`. Then `replaceVersionInScript(script, versionName, buildNumber)` and run build.
 - **Next build version (WSZ, single package):** `getLatestVersionForPackageId(packageId, dir, platform)` → fetches store version for the given package/bundle id and returns `{ versionName, buildNumber }`, which is passed as CLI args to `build.sh`.
-- **Report only:** `getVersionsReport(appNames, dir, platform)` for check_version intent; no increment. Platform `"all"` queries both Android and iOS.
-- **store-version-service.js** uses: CMS API (app config map), Google Play (service account JWT), App Store Connect (Apple JWT from `ios_api_key/`). Project dir(s) must have `service_account.json` and `ios_api_key/` for store lookups.
+- **Report only:** `getVersionsReport(appNames, flutterDir, platform)` is exported by store-service; not currently used by handlers (check_version not implemented). Platform `"all"` queries both Android and iOS.
+- **store-service.js** uses: CMS API (app config map), Google Play (service account JWT), App Store Connect (Apple JWT from `ios_api_key/`). Project dir(s) must have `service_account.json` and `ios_api_key/` for store lookups.
 
 ## Branch Handling
 
@@ -133,7 +127,6 @@ Platform for “latest version” is inferred from command: contains `build.sh i
 
 ## Conventions
 
-- Only one build at a time per flow (build lock in handler).
-- Long Discord replies are split with `splitMessage(text, 1900)` at newlines when possible.
+- Only one build at a time per flow (build lock passed as `options.buildState`).
 - User-facing replies often mention the requesting user (`discordMessage.author`). Vietnamese used for user-facing messages. Some status messages (e.g. branch success, “Đang bắt đầu build…”) may omit the mention.
-- New project flows: add a handler in `handlers/`, add env/channel routing in `index.js`, and call the handler with the right options (channel id, project dir, geminiService, buildState).
+- New project flows: add a handler in **build_handlers/**, add env/channel routing in `index.js`, and call the handler with `{ buildState }` (handlers use `getGeminiService()` and env for project dir).

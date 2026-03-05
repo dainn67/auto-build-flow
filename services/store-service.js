@@ -390,6 +390,77 @@ export async function getLatestVersionForPackageId(packageId, flutterDir, platfo
 }
 
 /**
+ * Get Android package names visible to a Google Play Developer account.
+ *
+ * Important limitation:
+ * - The Android Publisher API does NOT provide an "apps.list" endpoint to list
+ *   all applications in a developer account.
+ * - The best we can do via the API is to list Play Console users for the
+ *   developer account and collect package names referenced in their per-app
+ *   grants.
+ * - This will likely be incomplete if the account relies mostly on developer-
+ *   level permissions (e.g. CAN_SEE_ALL_APPS) rather than explicit per-app
+ *   grants.
+ *
+ * @param {string} flutterDir - Root of the Flutter project (contains service_account.json)
+ * @param {string} developerId - Play Console developer account id (the numeric id from Play Console URL)
+ * @returns {Promise<string[]>} Array of unique Android package names found in user grants
+ */
+export async function getAllAndroidPackageNames(flutterDir, developerId) {
+  const serviceAccountPath = join(flutterDir, "service_account.json");
+
+  if (!existsSync(serviceAccountPath)) {
+    console.log(
+      `⚠️  service_account.json not found at ${serviceAccountPath} – cannot infer package names.`,
+    );
+    return [];
+  }
+
+  const resolvedDeveloperId = developerId || process.env.GOOGLE_PLAY_DEVELOPER_ID;
+  if (!resolvedDeveloperId) {
+    throw new Error(
+      "Missing developerId. Google Play API requires a developer account id to list users. " +
+        "Pass it as the 2nd argument or set GOOGLE_PLAY_DEVELOPER_ID.",
+    );
+  }
+
+  const token = await getGoogleAccessToken(serviceAccountPath);
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const packageSet = new Set();
+  let pageToken = null;
+
+  do {
+    const url = new URL(
+      `https://androidpublisher.googleapis.com/androidpublisher/v3/developers/${resolvedDeveloperId}/users`,
+    );
+    url.searchParams.set("pageSize", "1000");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const res = await fetch(url, { headers });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(
+        `Google Play users.list failed: ${res.status} ${JSON.stringify(data)}`,
+      );
+    }
+
+    const users = data.users || [];
+    for (const user of users) {
+      const grants = user?.grants || [];
+      for (const grant of grants) {
+        if (grant?.packageName) packageSet.add(grant.packageName);
+      }
+    }
+
+    pageToken = data.nextPageToken || null;
+  } while (pageToken);
+
+  return Array.from(packageSet);
+}
+
+/**
  * Parse app names from a generated script string.
  * Script format:
  *   VERSION=1.2.3

@@ -1,8 +1,8 @@
-import { createMessagePrompt } from "../prompts/easypass-prompt.js";
+import { createMessagePrompt } from "../prompts/easypass-build-prompt.js";
 import { replaceFileContent, executeCommand } from "../utils.js";
 import { getRemoteBranches, checkoutBranch } from "../services/git-service.js";
 import { getGeminiService } from "../services/gemini-service.js";
-import { getLatestVersionForApps, parseAppNamesFromScript, replaceVersionInScript } from "../services/store-version-service.js";
+import { getLatestVersionForApps, parseAppNamesFromScript, replaceVersionInScript } from "../services/store-service.js";
 
 const defaultBuildState = { isBuilding: false };
 

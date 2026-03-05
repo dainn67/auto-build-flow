@@ -2,9 +2,9 @@ import express from "express";
 import dotenv from "dotenv";
 import { getGeminiService } from "./services/gemini-service.js";
 import { Client, GatewayIntentBits, Events } from "discord.js";
-import { handleAutoBuildMessage as handleAutoBuildEasypass } from "./handlers/easypass-handler.js";
-import { handleAutoBuildMessage as handleAutoBuildWsz } from "./handlers/wsz-handler.js";
-import { handleAutoBuildMessage as handleAutoBuildLeslie } from "./handlers/leslie-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildEasypass } from "./build_handlers/easypass-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildWsz } from "./build_handlers/wsz-handler.js";
+import { handleAutoBuildMessage as handleAutoBuildLeslie } from "./build_handlers/leslie-handler.js";
 
 // Load environment variables
 dotenv.config();

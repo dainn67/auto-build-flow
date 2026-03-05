@@ -1,6 +1,6 @@
 import { executeCommand } from "../utils.js";
 import { getGeminiService } from "../services/gemini-service.js";
-import { createLesliePrompt } from "../prompts/leslie-prompt.js";
+import { createLesliePrompt } from "../prompts/leslie-build-prompt.js";
 
 const defaultBuildState = { isBuilding: false };
 
