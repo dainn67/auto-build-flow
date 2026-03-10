@@ -20,8 +20,12 @@ For user wants to build the app:
 - Command: "build.sh i" (ios, default) or "build.sh a" (android).
 ${branchRule}
 
-Give a short response in user's language, matching user's tone. Mention branch/version detection if relevant.
+Give a list of 4 short responses in user's language, matching user's tone, in the following order:
+- A message saying you are going to build the app. Mention branch/version detection if relevant.
+- A message saying we are current at branch: (name is appended in later, eg: $message: $branch)
+- A message saying you start building the app.
+- A message saying you are done building the app, see status at: (url is appended in later, eg: $message: $status_url)
 
 Return in JSON format only:
-\`\`\`json{"intent":"", "message":"", "command":"", "version":"", "buildNumber":"", "useLatestVersion":false, "branch":""}\`\`\``;
+\`\`\`json{"intent":"", "messages":[], "command":"", "version":"", "buildNumber":"", "useLatestVersion":false, "branch":""}\`\`\``;
 }

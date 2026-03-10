@@ -71,7 +71,12 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
       return;
     }
 
-    const botMessage = aiResponseObj.message;
+    const botMessages = aiResponseObj.messages;
+    const initMessage = botMessages[0];
+    const branchMessage = botMessages[1];
+    const startMessage = botMessages[2];
+    const doneMessage = botMessages[3];
+
     const command = aiResponseObj.command;
     const branch = aiResponseObj.branch;
     const useLatestVersion = aiResponseObj.useLatestVersion;
@@ -81,7 +86,7 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
     buildState.isBuilding = true;
     locked = true;
 
-    const botResponse = `${discordMessage.author}\n${botMessage}`;
+    const botResponse = `${discordMessage.author}\n${initMessage}`;
     await discordMessage.channel.send(botResponse);
 
     // ── Auto-fetch latest store version if requested ──
@@ -91,7 +96,7 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
         const storeVersion = await getLatestVersionForPackageId(WSZ_APP_PACKAGE, dir, platform);
         version = storeVersion.versionName;
         buildNumber = storeVersion.buildNumber;
-        await discordMessage.channel.send(`Version tiếp theo: **${version}** (build ${buildNumber})`);
+        await discordMessage.channel.send(`Version: **${version}** (build ${buildNumber})`);
       } catch (err) {
         console.error("❌ Failed to fetch latest version:", err);
         await discordMessage.channel.send(`${discordMessage.author} ❌ Lỗi khi lấy version: ${err.message}`);
@@ -108,12 +113,12 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
         return;
       }
 
-      await discordMessage.channel.send(`Đã chuyển sang nhánh **${branch}**`);
+      await discordMessage.channel.send(`${branchMessage} **${branch}**`);
     }
 
-    await discordMessage.channel.send(`Đang bắt đầu build...`);
+    await discordMessage.channel.send(`${startMessage}`);
     await executeCommand(`cd ${dir} && ./${command} ${version} ${buildNumber}`);
-    discordMessage.channel.send(`Build hoàn tất, xem trạng thái tại:\nhttps://appstoreconnect.apple.com/teams/ffd01a9b-8357-4f90-8f06-41ddd833612b/apps/6759789375/testflight/ios`);
+    discordMessage.channel.send(`${doneMessage}\nhttps://appstoreconnect.apple.com/teams/ffd01a9b-8357-4f90-8f06-41ddd833612b/apps/6759789375/testflight/ios`);
   } catch (error) {
     console.error(`❌ Error processing message with Gemini:`, error);
 
