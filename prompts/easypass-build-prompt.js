@@ -40,9 +40,9 @@ For "check_status":
 - User may ask to check, update the status of the app on production.
 - Put the app user mentioned in 'apps'. Platform is a or i, default is a.
 - If no app specified, return empty array. If no platform specified, use platform a.
-- Return a single shell command string in the \`command\` field.
-- Command: python3 ./check_status.py
-- Return in JSON format: \`\`\`json{"intent":"check_status", "apps":[], "platform":"a", "command":""}\`\`\`
+- Generate this shell command: python3 ./check_status.py
+- Give a short response in Vietnamese, matching user's tone, saying here is the information of the apps
+- Return in JSON format: \`\`\`json{"intent":"check_status", "message":"", "apps":[], "platform":"a", "command":""}\`\`\`
 
 Return JSON only.`;
 }

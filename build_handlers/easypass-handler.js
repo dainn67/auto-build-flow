@@ -82,8 +82,12 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
         return;
       }
 
+      const message = aiResponseObj.message;
       const platform = aiResponseObj.platform;
       const command = aiResponseObj.command;
+
+      const botResponse = `${discordMessage.author}\n${message}`;
+      await discordMessage.channel.send(botResponse);
 
       for (const appName of apps) {
         const appConfig = await fetchAppConfig(appName);
