@@ -94,10 +94,18 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
         const result = await executeCommand(`cd ${dir} && ${trimmedCommand}`);
 
+        // Check if logs contain 'Failed to upload'
         if (result.success) {
-            await discordMessage.channel.send(
-                `${discordMessage.author} ✅ Build LESLIE hoàn tất.`,
-            );
+            const logs = (result.stdout || "") + "\n" + (result.stderr || "");
+            if (logs.toLowerCase().includes("failed to upload")) {
+                await discordMessage.channel.send(
+                    `${discordMessage.author} ❌ Upload LESLIE thất bại:\n${result.stdout ? "Output:\n```" + result.stdout.slice(-1800) + "```" : ""}`,
+                );
+            } else {
+                await discordMessage.channel.send(
+                    `${discordMessage.author} ✅ Build LESLIE hoàn tất.`,
+                );
+            }
         } else {
             // Show only the last 1800 characters of stderr, if available
             await discordMessage.channel.send(
