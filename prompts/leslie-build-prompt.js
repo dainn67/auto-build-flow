@@ -8,7 +8,7 @@ Rules:
 - If version or build number is missing, use default version 1.0.0 and build number 1.
 - Check and detect version and version code carefully, eg: 100 1 means 1.0.0, build 1
 - If it is a valid build request, return a single shell command string in the \`command\` field.
-- Command formats: python3 build.py <version> <buildNumber> <platform>
+- Command formats: python3 ./setup/build.py <version> <buildNumber> <platform>
 - Version is of format x.y.z, build number is an integer, platform is 'i' or 'a', by default it is a for android
 - Give 
 - If the message is NOT a build request, return an empty JSON object \`\{\}\`.

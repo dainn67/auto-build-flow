@@ -96,11 +96,12 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
         if (result.success) {
             await discordMessage.channel.send(
-                `${discordMessage.author} ✅ Build LESLIE hoàn tất.\n${result.stdout ? "Output:\n```" + result.stdout.slice(0, 1800) + "```" : ""}`,
+                `${discordMessage.author} ✅ Build LESLIE hoàn tất.`,
             );
         } else {
+            // Show only the last 1800 characters of stderr, if available
             await discordMessage.channel.send(
-                `${discordMessage.author} ❌ Build LESLIE thất bại.\n${result.stderr ? "Error:\n```" + result.stderr.slice(0, 1800) + "```" : ""}`,
+                `${discordMessage.author} ❌ Build LESLIE thất bại.\n${result.stderr ? "Error:\n```" + result.stderr.slice(-1800) + "```" : ""}`,
             );
         }
     } catch (error) {
