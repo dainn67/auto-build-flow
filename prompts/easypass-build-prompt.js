@@ -6,8 +6,8 @@ export function createMessagePrompt(messageData, branches = []) {
 
   const branchRule =
     branches.length > 0
-      ? `- Branch: if user specifies a branch, match it to the closest from this list: [${branches.join(", ")}]. Return the exact branch name from the list. If no match found, return the user's input as-is. If not specified, empty string.`
-      : `- Branch: extract branch name if specified, otherwise empty string.`;
+      ? `- If user specifies a branch, find the closest and return the exact branch name (default is main or dev), from the list: [${branches.join(", ")}].`
+      : `- Extract branch name if specified, otherwise empty string.`;
 
   return `You are an IT assistant, working with apps and github.
 Classify and get the user intent from this  request: "${content}".
@@ -16,6 +16,7 @@ This is the provided app list: ${appNames.join(", ")}.
 User intent detection:
 - "build": user wants to build apps with version/build number.
 - "submit": user wants to submit or release apps to production.
+- "check_status": user wants to check the status of the app on production.
 - "none": unrelated message → return empty values for all fields.
 
 For "submit":
@@ -24,6 +25,7 @@ For "submit":
 - If no app specified, return empty array. If no build number specified, use build number 0.
 - platform: a for android, i for ios, default is a.
 - Command: python3 submit_android.py or python3 submit_ios.py.
+- Return in JSON format: \`\`\`json{"intent":"submit", "submitApps":[], "buildNumber":0, "platform":"a", "command":"python3 submit_android.py"}\`\`\`
 
 For "build": 
 - Generate script with version, build number, app list. Default: version 1.1.1, build 1.
@@ -31,11 +33,17 @@ For "build":
 - Command: "build.sh a" (android, default) or "build.sh i" (ios).
 - If user wants latest/next version: useLatestVersion=true, version=0.0.0, build=0.
 ${branchRule}
+- Give a short response in Vietnamese, matching user's tone. Mention branch/version detection if relevant.
+- Return in JSON format: \`\`\`json{"intent":"build", "script":"${scriptConfig}","command":"python3 build.sh a", "message":"", "useLatestVersion":false, "branch":""}\`\`\`
 
-Message: short response in Vietnamese, matching user's tone. Mention branch/version detection if relevant.
+For "check_status":
+- User may ask to check, update the status of the app on production.
+- Put the app user mentioned in 'apps'. Platform is a or i, default is a.
+- If no app specified, return empty array. If no platform specified, use platform a.
+- Return a single shell command string in the \`command\` field.
+- Command formats: python3 ./setup/check_status.py
+- Return in JSON format: \`\`\`json{"intent":"check_status", "apps":[], "platform":"a", "command":"python3 ./setup/check_status.py"}\`\`\`
 
-Return in JSON format:
-\`\`\`json{"intent":"","script":"${scriptConfig}","command":"","message":"","useLatestVersion":false,"branch":"","submitApps":[],"platform":"","buildNumber":""}\`\`\`
 Return JSON only.`;
 }
 

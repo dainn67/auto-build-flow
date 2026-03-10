@@ -55,7 +55,7 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
     if (intent === "submit") {
       const appNames = aiResponseObj.submitApps;
       if (appNames.length === 0) {
-        await discordMessage.channel.send(`${discordMessage.author} ⚠️ Không tìm thấy app nào trong script.`);
+        await discordMessage.channel.send(`${discordMessage.author} ⚠️ Không tìm thấy app nào.`);
         return;
       }
 
@@ -72,6 +72,27 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
         const selectedBuildNumber = buildNumber > 0 ? `${buildNumber}` : "";
 
         await executeCommand(`cd ${dir} && ${command} ${selectedPackageName} ${selectedBuildNumber}`);
+      }
+
+      return;
+    } else if (intent === "check_status") {
+      const apps = aiResponseObj.apps;
+      if (apps.length === 0) {
+        await discordMessage.channel.send(`${discordMessage.author} ⚠️ Không tìm thấy app nào.`);
+        return;
+      }
+
+      const platform = aiResponseObj.platform;
+      const command = aiResponseObj.command;
+
+      for (const appName of apps) {
+        const appConfig = await fetchAppConfig(appName);
+        const packageName = appConfig.androidPackageName;
+        const bundleId = appConfig.iosBundleId;
+
+        const selectedPackageName = platform === "a" ? packageName : bundleId;
+
+        await executeCommand(`cd ${dir} && ${command} ${selectedPackageName}`);
       }
 
       return;
