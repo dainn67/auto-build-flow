@@ -96,29 +96,8 @@ export async function handleAutoBuildMessage(discordMessage, options = {}) {
 
         const selectedPackageName = platform === "a" ? packageName : bundleId;
 
-        // Run the command and extract content inside ```json ... ```
         const result = await executeCommand(`cd ${dir} && ${command} ${selectedPackageName}`);
-        let jsonContent = result.stdout;
-        const jsonStart = jsonContent.indexOf("```json");
-        if (jsonStart !== -1) {
-          jsonContent = jsonContent.slice(jsonStart + 7);
-          const jsonEnd = jsonContent.indexOf("```");
-          jsonContent = jsonEnd !== -1 ? jsonContent.slice(0, jsonEnd) : jsonContent;
-        }
-        jsonContent = jsonContent.trim();
-        const resultObj = JSON.parse(jsonContent);
-
-        const message = [
-          "┌───────────────────────────────┐",
-          `│  **${resultObj.package_name}**`,
-          `│ Version:      \`${resultObj.latest_version_code}\``,
-          `│ Release:      \`${resultObj.release_name}\``,
-          `│ Status:       \`${resultObj.status}\``,
-          `│ Rollout:      \`${resultObj.user_fraction * 100}%\``,
-          "└───────────────────────────────┘",
-        ].join("\n");
-
-        await discordMessage.channel.send(message);
+        if (!result.success) discordMessage.channel.send(`Không thể lấy dữ liệu của ${appName}.`);
       }
 
       return;
